@@ -6,6 +6,6 @@ import java.util.List;
 
 public interface FileService {
 
-	List<String> readLines(URI uri) throws IOException;
+	List<String> readLines(URI fileUri, URI workSpaceUri ) throws IOException;
 
 }

@@ -1,7 +1,6 @@
 package dev.secondsun;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -21,10 +20,10 @@ public class HoverTest {
 
     @Test
     public void hoverGSUOpCodes() {
-        CC65LanguageServer server = new CC65LanguageServer((uri)->{
+        CC65LanguageServer server = new CC65LanguageServer((uri, ignore)->{
             var sgsProgram = IOUtils.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
             return Arrays.asList(sgsProgram.split("\n"));
-        });
+        }, null);
         TextDocumentIdentifier textDocument = new TextDocumentIdentifier(URI.create("test.sgs"));
         Position position = new Position(11, 4);//A nop opcode
         Optional<Hover> hoverResult = server.hover(new TextDocumentPositionParams(textDocument, position));
@@ -37,10 +36,10 @@ public class HoverTest {
 
     @Test
     public void nohoverIfNotGSUOpCode() {
-        CC65LanguageServer server = new CC65LanguageServer((uri)->{
+        CC65LanguageServer server = new CC65LanguageServer( (uri, ignore)->{
             var sgsProgram = IOUtils.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
             return Arrays.asList(sgsProgram.split("\n"));
-        });
+        }, null);
         TextDocumentIdentifier textDocument = new TextDocumentIdentifier(URI.create("test.sgs"));
         Position position = new Position(11, 1);//Whitespace
         Optional<Hover> hoverResult = server.hover(new TextDocumentPositionParams(textDocument, position));

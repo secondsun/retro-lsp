@@ -1,15 +1,15 @@
 package dev.secondsun;
 
 import java.io.IOException;
-import java.lang.StackWalker.Option;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
+import java.util.logging.Logger;
+
+import javax.json.Json;
 
 import org.eclipse.tm4e.core.grammar.IGrammar;
 import org.eclipse.tm4e.core.grammar.IToken;
@@ -17,6 +17,9 @@ import org.eclipse.tm4e.core.grammar.ITokenizeLineResult;
 import org.eclipse.tm4e.core.registry.Registry;
 
 import dev.secondsun.lsp.Hover;
+import dev.secondsun.lsp.InitializeParams;
+import dev.secondsun.lsp.InitializeResult;
+import dev.secondsun.lsp.LanguageClient;
 import dev.secondsun.lsp.LanguageServer;
 import dev.secondsun.lsp.MarkedString;
 import dev.secondsun.lsp.Position;
@@ -29,8 +32,12 @@ public class CC65LanguageServer extends LanguageServer {
     private final FileService fileService;
     private Registry registry;
     private IGrammar grammar;
+    private final LanguageClient client;
+    private URI workspaceRoot;
+    private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
 
-    public CC65LanguageServer(FileService fileService) {
+    public CC65LanguageServer(FileService fileService, LanguageClient client) {
+        this.client = client;
         try {
             this.fileService = fileService;
             this.registry = new Registry();
@@ -41,6 +48,20 @@ public class CC65LanguageServer extends LanguageServer {
             throw new RuntimeException(e);
         }
 
+    }
+
+    @Override
+    public InitializeResult initialize(InitializeParams params) {
+        this.workspaceRoot = params.rootUri;
+
+        var initializeData = Json.createObjectBuilder();
+        initializeData.add("hoverProvider", true);
+        return new InitializeResult(initializeData.build());
+    }
+
+    @Override
+    public void initialized() {
+        LOG.info("initialized");
     }
 
     @Override
@@ -58,7 +79,7 @@ public class CC65LanguageServer extends LanguageServer {
             var hover = new Hover();
             hover.range = new Range(new Position(params.position.line, token.getStartIndex()),
                     new Position(params.position.line, token.getEndIndex()));
-            var result = lookup(tokenText);                    
+            var result = lookup(tokenText);
             if (result != null) {
                 hover.contents = Arrays.asList(result);
             }
@@ -69,12 +90,18 @@ public class CC65LanguageServer extends LanguageServer {
     }
 
     private MarkedString lookup(String tokenText) {
-        return switch (tokenText) {
-            case "nop" -> new MarkedString("No operation");
+        MarkedString res;
+        switch (tokenText) {
+            case "nop":
+                res = new MarkedString("No operation");
+                break;
+            default:
+                res = null;
+                break;
 
-            default -> null;
-
-        };
+        }
+        ;
+        return res;
     }
 
     private String getTokenText(String line, IToken token) {
@@ -98,7 +125,7 @@ public class CC65LanguageServer extends LanguageServer {
     private void prepareFile(URI uri) {
         files.computeIfAbsent(uri, (key) -> {
             try {
-                return fileService.readLines(key);
+                return fileService.readLines(key, workspaceRoot);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

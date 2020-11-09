@@ -1,4 +1,4 @@
-package dev.secondsun;
+package dev.secondsun.tm4e4lsp;
 
 import java.io.IOException;
 import java.net.URI;

@@ -8,20 +8,21 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.Optional;
 
-import org.apache.commons.io.IOUtils;
 import org.junit.Test;
 
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.TextDocumentIdentifier;
 import dev.secondsun.lsp.TextDocumentPositionParams;
+import dev.secondsun.tm4e4lsp.CC65LanguageServer;
+import dev.secondsun.tm4e4lsp.util.Util;
 
 public class HoverTest {
 
     @Test
     public void hoverGSUOpCodes() {
         CC65LanguageServer server = new CC65LanguageServer((uri, ignore)->{
-            var sgsProgram = IOUtils.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
+            var sgsProgram = Util.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
             return Arrays.asList(sgsProgram.split("\n"));
         }, null);
         TextDocumentIdentifier textDocument = new TextDocumentIdentifier(URI.create("test.sgs"));
@@ -37,7 +38,7 @@ public class HoverTest {
     @Test
     public void nohoverIfNotGSUOpCode() {
         CC65LanguageServer server = new CC65LanguageServer( (uri, ignore)->{
-            var sgsProgram = IOUtils.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
+            var sgsProgram = Util.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
             return Arrays.asList(sgsProgram.split("\n"));
         }, null);
         TextDocumentIdentifier textDocument = new TextDocumentIdentifier(URI.create("test.sgs"));

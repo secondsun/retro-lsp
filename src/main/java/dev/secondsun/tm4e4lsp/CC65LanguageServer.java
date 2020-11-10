@@ -9,13 +9,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Logger;
 
-import javax.json.Json;
 
-import org.eclipse.tm4e.core.grammar.IGrammar;
-import org.eclipse.tm4e.core.grammar.IToken;
-import org.eclipse.tm4e.core.grammar.ITokenizeLineResult;
-import org.eclipse.tm4e.core.registry.Registry;
-
+import dev.secondsun.tm4e.core.grammar.IGrammar;
+import dev.secondsun.tm4e.core.grammar.IToken;
+import dev.secondsun.tm4e.core.grammar.ITokenizeLineResult;
+import dev.secondsun.tm4e.core.registry.Registry;
+import jakarta.json.Json;
+import jakarta.json.JsonObject;
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.InitializeResult;
@@ -53,7 +53,7 @@ public class CC65LanguageServer extends LanguageServer {
     @Override
     public InitializeResult initialize(InitializeParams params) {
         this.workspaceRoot = params.rootUri;
-
+            JsonObject o;
         var initializeData = Json.createObjectBuilder();
         initializeData.add("hoverProvider", true);
         return new InitializeResult(initializeData.build());

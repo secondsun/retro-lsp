@@ -2,11 +2,13 @@ package dev.secondsun;
 
 import java.util.Arrays;
 
-import org.apache.commons.io.IOUtils;
-import org.eclipse.tm4e.core.grammar.IGrammar;
-import org.eclipse.tm4e.core.grammar.IToken;
-import org.eclipse.tm4e.core.grammar.ITokenizeLineResult;
-import org.eclipse.tm4e.core.registry.Registry;
+import dev.secondsun.tm4e.core.grammar.IGrammar;
+import dev.secondsun.tm4e.core.grammar.IToken;
+import dev.secondsun.tm4e.core.grammar.ITokenizeLineResult;
+import dev.secondsun.tm4e.core.registry.Registry;
+import dev.secondsun.tm4e4lsp.CC65LanguageServer;
+import dev.secondsun.tm4e4lsp.util.Util;
+
 import org.junit.Test;
 
 public class FirstTest {
@@ -21,7 +23,7 @@ public class FirstTest {
         IGrammar grammar = registry.loadGrammarFromPathSync("snes.json",
                 CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
         
-        var sgsProgram = IOUtils.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream("test.sgs"));
+        var sgsProgram = Util.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream("test.sgs"));
         
         Arrays.asList(sgsProgram.split("\n")).forEach(line -> {
             ITokenizeLineResult lineTokens = grammar.tokenizeLine(line);

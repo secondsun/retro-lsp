@@ -12,15 +12,14 @@ set -e
 # Build using jlink
 rm -rf dist/linux
 $JAVA_HOME/bin/jlink \
-  --module-path target/classes:target/dependency \
+  --module-path "$JAVA_HOME/jmods:target/classes:target/dependency" \
   --add-modules ALL-MODULE-PATH \
   --launcher launcher=dev.secondsun.tm4e4lsp/dev.secondsun.tm4e4lsp.Main \
   --output dist/linux \
-  --vm=server \
-  --compress 2 
-#  --strip-debug \
+  --vm=server 
+#  --compress 2 \
+#  --strip-debug
 
-# strip -p --strip-unneeded dist/linux/lib/server/libjvm.so 
+ #strip -p --strip-unneeded dist/linux/lib/server/libjvm.so 
 
-sed -i 's/JLINK_VM_OPTIONS=.*/JLINK_VM_OPTIONS=--enable-preview/' dist/linux/bin/launcher
 

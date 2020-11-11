@@ -1,8 +1,7 @@
-module dev.secondsun.tm4e4lsp {
+open module dev.secondsun.tm4e4lsp {
     requires java.logging;
     requires java.xml;
-    requires jakarta.json;
-    requires jakarta.json.bind;
+    requires com.google.gson;
     requires xml.apis.ext;
 
     requires dev.secondsun.lsp;

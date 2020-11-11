@@ -3,22 +3,19 @@
 
 set -e
 
-# Needed if you have a java version other than 11 as default
-JAVA_HOME=/etc/alternatives/java_sdk
+# Set env variables to build with linux toolchain but windows target
+REAL_JAVA_HOME=$JAVA_HOME
+JAVA_HOME="./jdks/mac/jdk-15.0.1.jdk"
 
-# Compile sources
-mvn compile
-
-# Patch gson
-if [ ! -e modules/gson.jar ]; then
-  ./scripts/patch_gson.sh
-fi
-
-# Build using jlink
+# Build in dist/windows
 rm -rf dist/mac
-$JAVA_HOME/bin/jlink \
-  --module-path target/classes \
-  --add-modules gson,javacs,wla_server \
-  --launcher launcher=wla_server/net.saga.snes.dev.wlalanguageserver.Main \
+$REAL_JAVA_HOME/bin/jlink \
+  --module-path "$JAVA_HOME/jmods:target/classes:target/dependency" \
+  --add-modules ALL-MODULE-PATH \
+  --launcher launcher=dev.secondsun.tm4e4lsp/dev.secondsun.tm4e4lsp.Main \
   --output dist/mac \
-  --compress 2 
+  --vm=server \
+  --compress 2 \
+  --strip-debug
+
+ strip -p --strip-unneeded dist/mac/lib/server/libjvm.so 

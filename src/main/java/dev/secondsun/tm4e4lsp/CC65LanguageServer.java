@@ -9,13 +9,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Logger;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.grammar.IToken;
 import dev.secondsun.tm4e.core.grammar.ITokenizeLineResult;
 import dev.secondsun.tm4e.core.registry.Registry;
-import jakarta.json.Json;
-import jakarta.json.JsonObject;
+
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.InitializeResult;
@@ -53,10 +54,10 @@ public class CC65LanguageServer extends LanguageServer {
     @Override
     public InitializeResult initialize(InitializeParams params) {
         this.workspaceRoot = params.rootUri;
-            JsonObject o;
-        var initializeData = Json.createObjectBuilder();
-        initializeData.add("hoverProvider", true);
-        return new InitializeResult(initializeData.build());
+            
+        var initializeData = new JsonObject();
+        initializeData.add("hoverProvider", new JsonPrimitive(true));
+        return new InitializeResult(initializeData);
     }
 
     @Override
@@ -64,8 +65,15 @@ public class CC65LanguageServer extends LanguageServer {
         LOG.info("initialized");
     }
 
+    public void didChangeConfiguration(dev.secondsun.lsp.DidChangeConfigurationParams params) {
+
+    };
+
+    public void didChangeWatchedFiles(dev.secondsun.lsp.DidChangeWatchedFilesParams params) {};
+
     @Override
     public Optional<Hover> hover(TextDocumentPositionParams params) {
+        LOG.info("hover" + params.toString());
         prepareFile(params.textDocument.uri);
 
         String line = files.get(params.textDocument.uri).get(params.position.line);

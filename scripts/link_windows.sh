@@ -3,18 +3,20 @@
 
 set -e
 
-# Set env variables to build with mac toolchain but windows target
+# Set env variables to build with linux toolchain but windows target
 REAL_JAVA_HOME=$JAVA_HOME
-JAVA_HOME="./jdks/windows/jdk-13"
+JAVA_HOME="./jdks/windows/jdk-15.0.1"
 
 # Build in dist/windows
 rm -rf dist/windows
-$JAVA_HOME/bin/jlink \
-  --module-path "$JAVA_HOME/jmods;modules/gson.jar;target/classes;target/dependency" \
+$REAL_JAVA_HOME/bin/jlink \
+  --module-path "$JAVA_HOME/jmods:target/classes:target/dependency" \
   --add-modules ALL-MODULE-PATH \
-  --launcher launcher=wla_server/net.saga.snes.dev.wlalanguageserver.Main \
+  --launcher launcher=dev.secondsun.tm4e4lsp/dev.secondsun.tm4e4lsp.Main \
   --output dist/windows \
-  --compress 2 
-sed -i 's/JLINK_VM_OPTIONS=.*/JLINK_VM_OPTIONS=--enable-preview/' dist/windows/bin/launcher
-sed -i 's/set JLINK_VM_OPTIONS=.*/set JLINK_VM_OPTIONS=--enable-preview/' dist/windows/bin/launcher.bat
+  --vm=server \
+  --compress 2 \
+  --strip-debug
+
+
 

@@ -53,34 +53,9 @@
     <dependency>
       <groupId>dev.secondsun</groupId>
       <artifactId>languageserver</artifactId>
-      <version>0.4</version>
+      <version>0.6</version>
     </dependency>
-    <!-- JSON support -->
-    <dependency>
-      <groupId>jakarta.json</groupId>
-      <artifactId>jakarta.json-api</artifactId>
-      <version>2.0.0</version>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse</groupId>
-      <artifactId>yasson</artifactId>
-      <version>2.0.1</version>
-      <scope>runtime</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.glassfish</groupId>
-      <artifactId>jakarta.json</artifactId>
-      <version>2.0.0</version>
-      <classifier>module</classifier>
-      <scope>runtime</scope>
-    </dependency>
-    <!-- JSON-B API -->
-    <dependency>
-      <groupId>jakarta.json.bind</groupId>
-      <artifactId>jakarta.json.bind-api</artifactId>
-      <version>2.0.0</version>
-    </dependency>
-
+    
   </dependencies>
 
   <build>
@@ -108,7 +83,7 @@
             <manifest>
               <addClasspath>true</addClasspath>
               <classpathPrefix>dependency/</classpathPrefix>
-              <mainClass>net.saga.snes.dev.wlalanguageserver.Main</mainClass>
+              <mainClass>dev.secondsun.tm4e4lsp.Main</mainClass>
             </manifest>
           </archive>
         </configuration>

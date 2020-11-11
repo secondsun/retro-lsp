@@ -18,7 +18,7 @@ public class Main {
         LOG.info("Starting");
         
         FileService fileService = (uri, workspaceRoot)->{
-            return Util.readLines(new FileInputStream(Paths.get(workspaceRoot.toString()+ uri.toString()).toFile()));
+            return Util.readLines(new FileInputStream(Paths.get(uri).toFile()));
         };
       LSP.connect((langClient) -> new CC65LanguageServer(fileService, langClient), System.in, System.out);
   }

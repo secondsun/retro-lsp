@@ -12,7 +12,7 @@ import org.junit.Test;
 
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.Position;
-import dev.secondsun.lsp.TextDocumentIdentifier;
+import dev.secondsun.lsp.TextDocumentIdentifier;git a
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.tm4e4lsp.CC65LanguageServer;
 import dev.secondsun.tm4e4lsp.util.Util;

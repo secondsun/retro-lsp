@@ -2,6 +2,7 @@ package dev.secondsun.tm4e4lsp;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -10,22 +11,17 @@ import java.util.Optional;
 import java.util.logging.Logger;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
-
-import dev.secondsun.tm4e.core.grammar.IGrammar;
-import dev.secondsun.tm4e.core.grammar.IToken;
-import dev.secondsun.tm4e.core.grammar.ITokenizeLineResult;
-import dev.secondsun.tm4e.core.registry.Registry;
 
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.InitializeResult;
 import dev.secondsun.lsp.LanguageClient;
 import dev.secondsun.lsp.LanguageServer;
-import dev.secondsun.lsp.MarkedString;
-import dev.secondsun.lsp.Position;
-import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
+import dev.secondsun.tm4e.core.grammar.IGrammar;
+import dev.secondsun.tm4e.core.registry.Registry;
+import dev.secondsun.tm4e4lsp.feature.Feature;
+import dev.secondsun.tm4e4lsp.feature.HoverFeature;
 
 public class CC65LanguageServer extends LanguageServer {
 
@@ -35,6 +31,11 @@ public class CC65LanguageServer extends LanguageServer {
     private IGrammar grammar;
     private final LanguageClient client;
     private URI workspaceRoot;
+    
+    private final HoverFeature hoverFeature;
+    
+    private final List<Feature<?>> features = new ArrayList<>();
+
     private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
 
     public CC65LanguageServer(FileService fileService, LanguageClient client) {
@@ -45,6 +46,10 @@ public class CC65LanguageServer extends LanguageServer {
 
             this.grammar = registry.loadGrammarFromPathSync("snes.json",
                     CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
+            
+                    this.hoverFeature = new HoverFeature(grammar);
+            features.add(hoverFeature);
+
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -56,7 +61,9 @@ public class CC65LanguageServer extends LanguageServer {
         this.workspaceRoot = params.rootUri;
             
         var initializeData = new JsonObject();
-        initializeData.add("hoverProvider", new JsonPrimitive(true));
+        for (Feature<?> feature : features) {
+            feature.initialize(initializeData);
+        }
         return new InitializeResult(initializeData);
     }
 
@@ -76,52 +83,7 @@ public class CC65LanguageServer extends LanguageServer {
         LOG.info("hover" + params.toString());
         prepareFile(params.textDocument.uri);
 
-        String line = files.get(params.textDocument.uri).get(params.position.line);
-        ITokenizeLineResult lineTokens = grammar.tokenizeLine(line);
-
-        Optional<IToken> maybeToken = getTokenAt(lineTokens, params.position.character);
-
-        if (maybeToken.isPresent()) {
-            var token = maybeToken.get();
-            String tokenText = getTokenText(line, token);
-            var hover = new Hover();
-            hover.range = new Range(new Position(params.position.line, token.getStartIndex()),
-                    new Position(params.position.line, token.getEndIndex()));
-            var result = lookup(tokenText);
-            if (result != null) {
-                hover.contents = Arrays.asList(result);
-            }
-            return Optional.of(hover);
-        } else {
-            return Optional.empty();
-        }
-    }
-
-    private MarkedString lookup(String tokenText) {
-        MarkedString res;
-        switch (tokenText) {
-            case "nop":
-                res = new MarkedString("No operation");
-                break;
-            default:
-                res = null;
-                break;
-
-        }
-        ;
-        return res;
-    }
-
-    private String getTokenText(String line, IToken token) {
-        var start = token.getStartIndex();
-        var end = token.getEndIndex();
-        return line.substring(start, end);
-    }
-
-    private Optional<IToken> getTokenAt(ITokenizeLineResult lineTokens, int position) {
-        var tokenList = Arrays.asList(lineTokens.getTokens());
-        return tokenList.stream().filter(token -> token.getStartIndex() < position && token.getEndIndex() >= position)
-                .findFirst();
+        return hoverFeature.executeFeature(params, files.get(params.textDocument.uri));
 
     }
 

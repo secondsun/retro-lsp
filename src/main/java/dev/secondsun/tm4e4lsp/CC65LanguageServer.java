@@ -47,7 +47,8 @@ public class CC65LanguageServer extends LanguageServer {
             this.grammar = registry.loadGrammarFromPathSync("snes.json",
                     CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
             
-                    this.hoverFeature = new HoverFeature(grammar);
+            this.hoverFeature = new HoverFeature(grammar);
+            
             features.add(hoverFeature);
 
         } catch (Exception e) {

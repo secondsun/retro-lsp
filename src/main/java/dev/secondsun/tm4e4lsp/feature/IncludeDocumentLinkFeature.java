@@ -15,7 +15,7 @@ public class IncludeDocumentLinkFeature implements Feature {
         var documentLinkOptions = new JsonObject();
         documentLinkOptions.addProperty("resolveProvider", false);
         initializationData.add("documentLinkProvider", documentLinkOptions);
-        this.workspaceRoot = workspaceRoot;
+        //this.workspaceRoot = workspaceRoot;
         
     }
 

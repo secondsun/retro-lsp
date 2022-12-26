@@ -5,9 +5,6 @@ set -e
 # Needed if you have a java version other than 11 as default
 JAVA_HOME=/c/Users/secon/.sdkman/candidates/java/current/bin/java
 
-# Needed once
-npm install
-
 # Build fat jar
 ./scripts/link_mac.sh
 ./scripts/link_windows.sh

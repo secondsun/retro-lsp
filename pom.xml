@@ -55,11 +55,11 @@
 			<version>2.10</version>
 		</dependency>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>4.13.2</version>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <version>5.9.1</version>
       <scope>test</scope>
-    </dependency>
+  </dependency>
 		<dependency>
 			<groupId>dev.secondsun</groupId>
 			<artifactId>w3c0sac</artifactId>
@@ -81,6 +81,7 @@
 
   <build>
     <plugins>
+      
       <plugin>
         <artifactId>maven-dependency-plugin</artifactId>
         <executions>
@@ -135,7 +136,7 @@
             </execution>
         </executions>
     </plugin>
-    <plugin>
+    <!-- <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-gpg-plugin</artifactId>
         <version>3.0.1</version>
@@ -148,7 +149,7 @@
                 </goals>
             </execution>
         </executions>
-    </plugin>
+    </plugin> -->
     </plugins>
     <pluginManagement>
       <!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->
@@ -197,4 +198,68 @@
       </plugins>
     </pluginManagement>
   </build>
+    <profiles>
+    <profile>
+      <id>native</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.graalvm.buildtools</groupId>
+            <artifactId>native-maven-plugin</artifactId>
+            <version>0.9.19</version>
+            <extensions>true</extensions>
+            <executions>
+              <execution>
+                <id>build-native</id>
+                <goals>
+                  <goal>compile-no-fork</goal>
+                </goals>
+                <phase>package</phase>
+              </execution>
+              <execution>
+                <id>test-native</id>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <phase>test</phase>
+              </execution>
+            </executions>
+            <configuration>
+              <buildArgs>
+                <arg>-H:ResourceConfigurationFiles=${project.basedir}/build/resource-config.json</arg>
+                <arg>-H:ReflectionConfigurationFiles=${project.basedir}/build/reflect-config.json</arg>
+              </buildArgs>
+            </configuration>
+          </plugin>
+          
+
+<plugin>
+  <groupId>org.codehaus.mojo</groupId>
+  <artifactId>exec-maven-plugin</artifactId>
+  <version>3.1.0</version>
+  <executions>
+      <execution>
+          <id>java-agent</id>
+          <goals>
+              <goal>exec</goal>
+          </goals>
+          <configuration>
+              <executable>java</executable>
+              <workingDirectory>${project.build.directory}</workingDirectory>
+              <arguments>
+                  <argument>-classpath</argument>
+                  <classpath/>
+                  <argument>dev.secondsun.tm4e4lsp.Main</argument>
+              </arguments>
+          </configuration>
+      </execution>
+  </executions>
+</plugin>
+
+
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+  
 </project>

@@ -2,6 +2,8 @@ package dev.secondsun;
 
 import java.util.Arrays;
 
+import org.junit.jupiter.api.Test;
+
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.grammar.IToken;
 import dev.secondsun.tm4e.core.grammar.ITokenizeLineResult;
@@ -9,7 +11,7 @@ import dev.secondsun.tm4e.core.registry.Registry;
 import dev.secondsun.tm4e4lsp.CC65LanguageServer;
 import dev.secondsun.tm4e4lsp.util.Util;
 
-import org.junit.Test;
+
 
 public class FirstTest {
     /**

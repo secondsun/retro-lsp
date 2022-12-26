@@ -1,0 +1,26 @@
+{
+  "resources":{
+  "includes":[{
+      "pattern":"\\Qsnes.json\\E"
+    }, 
+    {
+      "pattern":"\\Qtables/CaseFold.bin\\E"
+    }, 
+    {
+      "pattern":"\\Qtables/CaseUnfold_11.bin\\E"
+    }, 
+    {
+      "pattern":"\\Qtables/CaseUnfold_11_Locale.bin\\E"
+    }, 
+    {
+      "pattern":"\\Qtables/CaseUnfold_12.bin\\E"
+    }, 
+    {
+      "pattern":"\\Qtables/CaseUnfold_12_Locale.bin\\E"
+    }, 
+    {
+      "pattern":"\\Qtables/CaseUnfold_13.bin\\E"
+    }]},
+  "bundles":[]
+  
+}

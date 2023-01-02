@@ -36,7 +36,7 @@
     "configuration": {
       "title": "retroca65 configuration",
       "properties": {
-        "wla.trace.server": {
+        "retroca65.trace.server": {
           "scope": "window",
           "type": "string",
           "enum": [

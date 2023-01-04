@@ -10,9 +10,9 @@ $JAVA_HOME/bin/jlink \
   --add-modules ALL-MODULE-PATH \
   --launcher launcher=dev.secondsun.tm4e4lsp/dev.secondsun.tm4e4lsp.Main \
   --output dist/windows \
-  --vm=server \
-  --compress 2 \
-  --strip-debug
+  --vm=server #\
+  #--compress 2 \
+  #--strip-debug
 
 
 

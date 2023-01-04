@@ -12,6 +12,8 @@ import java.util.logging.Logger;
 
 import com.google.gson.JsonObject;
 
+import dev.secondsun.lsp.DocumentLink;
+import dev.secondsun.lsp.DocumentLinkParams;
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.InitializeResult;
@@ -20,6 +22,7 @@ import dev.secondsun.lsp.LanguageServer;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.registry.Registry;
+import dev.secondsun.tm4e4lsp.feature.DocumentLinkFeature;
 import dev.secondsun.tm4e4lsp.feature.Feature;
 import dev.secondsun.tm4e4lsp.feature.HoverFeature;
 
@@ -33,8 +36,9 @@ public class CC65LanguageServer extends LanguageServer {
     private URI workspaceRoot;
     
     private final HoverFeature hoverFeature;
+    private DocumentLinkFeature documentLinkFeature;
     
-    private final List<Feature<?>> features = new ArrayList<>();
+    private final List<Feature<?, ?>> features = new ArrayList<>();
 
     private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
 
@@ -48,8 +52,11 @@ public class CC65LanguageServer extends LanguageServer {
                     CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
             
             this.hoverFeature = new HoverFeature(grammar);
-            
+            this.documentLinkFeature = new DocumentLinkFeature(grammar);
+
             features.add(hoverFeature);
+            features.add(documentLinkFeature);
+            
 
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -62,7 +69,7 @@ public class CC65LanguageServer extends LanguageServer {
         this.workspaceRoot = params.rootUri;
             
         var initializeData = new JsonObject();
-        for (Feature<?> feature : features) {
+        for (Feature<?, ?> feature : features) {
             feature.initialize(initializeData);
         }
         return new InitializeResult(initializeData);
@@ -84,8 +91,16 @@ public class CC65LanguageServer extends LanguageServer {
         LOG.info("hover" + params.toString());
         prepareFile(params.textDocument.uri);
 
-        return hoverFeature.executeFeature(params, files.get(params.textDocument.uri));
+        return hoverFeature.handle(params, files.get(params.textDocument.uri));
 
+    }
+
+    @Override
+    public List<DocumentLink> documentLink(DocumentLinkParams params) {
+        LOG.info("DocumentLink " + params.toString());
+        prepareFile(params.textDocument.uri);
+
+        return documentLinkFeature.handle(params, files.get(params.textDocument.uri)).orElse(new ArrayList<>());
     }
 
     /**

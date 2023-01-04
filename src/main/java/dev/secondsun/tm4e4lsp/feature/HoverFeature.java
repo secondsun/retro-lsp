@@ -17,7 +17,7 @@ import dev.secondsun.tm4e.core.grammar.IToken;
 import dev.secondsun.tm4e.core.grammar.ITokenizeLineResult;
 import dev.secondsun.tm4e4lsp.util.Util;
 
-public class HoverFeature implements Feature<Hover> {
+public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> {
 
     private IGrammar grammar;
 
@@ -30,7 +30,7 @@ public class HoverFeature implements Feature<Hover> {
         initializeData.add("hoverProvider", new JsonPrimitive(true));
     }
 
-	public Optional<Hover> executeFeature(TextDocumentPositionParams params, List<String> fileContent) {
+	public Optional<Hover> handle(TextDocumentPositionParams params, List<String> fileContent) {
         String line = fileContent.get(params.position.line);
         ITokenizeLineResult lineTokens = grammar.tokenizeLine(line);
 

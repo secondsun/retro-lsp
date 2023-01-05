@@ -25,7 +25,7 @@ public class FirstTest {
         IGrammar grammar = registry.loadGrammarFromPathSync("snes.json",
                 CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
         
-        var sgsProgram = Util.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream("test.sgs"));
+        var sgsProgram = Util.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream("libSFX.i"));
         
         Arrays.asList(sgsProgram.split("\n")).forEach(line -> {
             ITokenizeLineResult lineTokens = grammar.tokenizeLine(line);

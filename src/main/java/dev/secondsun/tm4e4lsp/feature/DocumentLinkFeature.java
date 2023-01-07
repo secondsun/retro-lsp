@@ -16,6 +16,7 @@ import dev.secondsun.lsp.DocumentLinkParams;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
+import dev.secondsun.tm4e4lsp.util.Util;
 
 public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<DocumentLink>> {
     private static final Logger LOG = Logger.getLogger(DocumentLinkFeature.class.getName());
@@ -42,7 +43,7 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
         IntStream.range(0, fileContent.size()).forEach(idx -> {
 
             var line = fileContent.get(idx);
-            if (line.toUpperCase().startsWith(".INCLUDE")) {
+            if (Util.isIncludeDirective(line)) {
                 try {
                     var fileName = line.split(";")[0].split("\"")[1];
                     var link = new DocumentLink();

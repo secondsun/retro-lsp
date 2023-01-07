@@ -12,8 +12,10 @@ import java.util.logging.Logger;
 
 import com.google.gson.JsonObject;
 
+import dev.secondsun.lsp.CompletionList;
 import dev.secondsun.lsp.DocumentLink;
 import dev.secondsun.lsp.DocumentLinkParams;
+import dev.secondsun.lsp.FileChangeType;
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.InitializeResult;
@@ -25,6 +27,7 @@ import dev.secondsun.tm4e.core.registry.Registry;
 import dev.secondsun.tm4e4lsp.feature.DocumentLinkFeature;
 import dev.secondsun.tm4e4lsp.feature.Feature;
 import dev.secondsun.tm4e4lsp.feature.HoverFeature;
+import dev.secondsun.tm4e4lsp.feature.IncludeCompletionFeature;
 
 public class CC65LanguageServer extends LanguageServer {
 
@@ -39,6 +42,7 @@ public class CC65LanguageServer extends LanguageServer {
     private DocumentLinkFeature documentLinkFeature;
     
     private final List<Feature<?, ?>> features = new ArrayList<>();
+    private IncludeCompletionFeature includeCompletionFeature;
 
     private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
 
@@ -53,7 +57,9 @@ public class CC65LanguageServer extends LanguageServer {
             
             this.hoverFeature = new HoverFeature(grammar);
             this.documentLinkFeature = new DocumentLinkFeature(grammar);
+            this.includeCompletionFeature = new IncludeCompletionFeature();
 
+            features.add(includeCompletionFeature);
             features.add(hoverFeature);
             features.add(documentLinkFeature);
             
@@ -84,7 +90,24 @@ public class CC65LanguageServer extends LanguageServer {
 
     };
 
-    public void didChangeWatchedFiles(dev.secondsun.lsp.DidChangeWatchedFilesParams params) {};
+    public void didChangeWatchedFiles(dev.secondsun.lsp.DidChangeWatchedFilesParams params) {
+        for (var change : params.changes) {
+            switch(change.type) {
+                case FileChangeType.Changed: 
+                    files.remove(change.uri);
+                break;
+                default:
+                continue;
+            }
+        }
+    };
+
+    @Override
+    public Optional<CompletionList> completion(TextDocumentPositionParams params) {
+        prepareFile(params.textDocument.uri);
+        return includeCompletionFeature.handle(params, files.get(params.textDocument.uri));
+    }
+    
 
     @Override
     public Optional<Hover> hover(TextDocumentPositionParams params) {

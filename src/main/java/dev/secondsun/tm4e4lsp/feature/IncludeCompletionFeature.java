@@ -23,7 +23,8 @@ import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.lsp.TextEdit;
 import dev.secondsun.tm4e4lsp.util.Util;
 
-public class IncludeCompletionFeature implements Feature<TextDocumentPositionParams, CompletionList>{
+public class IncludeCompletionFeature implements CompletionFeature {
+
 
     private static final Logger LOG = Logger.getLogger(DocumentLinkFeature.class.getName());
     private static final Gson GSON = new GsonBuilder().create();
@@ -93,6 +94,12 @@ public class IncludeCompletionFeature implements Feature<TextDocumentPositionPar
         }
         LOG.info("End Completion");        
         return Optional.of(list);
+    }
+
+    @Override
+    public boolean canComplete(TextDocumentPositionParams params, List<String> fileContent) {
+        // TODO Auto-generated method stub
+        return false;
     }
 
 

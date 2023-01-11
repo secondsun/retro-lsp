@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import com.google.gson.JsonObject;
 
 import dev.secondsun.lsp.CompletionItem;
+import dev.secondsun.lsp.CompletionItemKind;
 import dev.secondsun.lsp.CompletionList;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
@@ -147,6 +148,7 @@ public class DirectiveCompletionFeature implements CompletionFeature {
                                         var completionText = Util.trimCompletion(leftOfCursor, text);
                                         var item = new CompletionItem();
                                         item.label = text;
+                                        item.kind = CompletionItemKind.Struct;
                                         LOG.log(Level.INFO, text);
                                         LOG.log(Level.INFO, completionText);
                                         item.textEdit = new TextEdit(new Range(new Position(params.position.line, params.position.character), 
@@ -168,8 +170,9 @@ public class DirectiveCompletionFeature implements CompletionFeature {
 
     @Override
     public boolean canComplete(TextDocumentPositionParams params, List<String> fileContent) {
-        // TODO Auto-generated method stub
-        return false;
+        var line = fileContent.get(params.position.line).trim();
+        var leftOfCursor = line.substring(0,params.position.character).trim();
+        return !CONTROL_COMMANDS.stream().filter(string -> string.startsWith(leftOfCursor.toUpperCase())).findAny().isEmpty();
     }
 
 }

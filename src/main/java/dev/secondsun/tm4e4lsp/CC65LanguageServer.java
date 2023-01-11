@@ -24,6 +24,8 @@ import dev.secondsun.lsp.LanguageServer;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.registry.Registry;
+import dev.secondsun.tm4e4lsp.feature.CompletionFeature;
+import dev.secondsun.tm4e4lsp.feature.DirectiveCompletionFeature;
 import dev.secondsun.tm4e4lsp.feature.DocumentLinkFeature;
 import dev.secondsun.tm4e4lsp.feature.Feature;
 import dev.secondsun.tm4e4lsp.feature.HoverFeature;
@@ -43,6 +45,7 @@ public class CC65LanguageServer extends LanguageServer {
     
     private final List<Feature<?, ?>> features = new ArrayList<>();
     private IncludeCompletionFeature includeCompletionFeature;
+    private DirectiveCompletionFeature commandCompletionFeature;
 
     private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
 
@@ -58,10 +61,12 @@ public class CC65LanguageServer extends LanguageServer {
             this.hoverFeature = new HoverFeature(grammar);
             this.documentLinkFeature = new DocumentLinkFeature(grammar);
             this.includeCompletionFeature = new IncludeCompletionFeature();
+            this.commandCompletionFeature = new DirectiveCompletionFeature();
 
             features.add(includeCompletionFeature);
             features.add(hoverFeature);
             features.add(documentLinkFeature);
+            features.add(commandCompletionFeature);
             
 
         } catch (Exception e) {
@@ -105,7 +110,13 @@ public class CC65LanguageServer extends LanguageServer {
     @Override
     public Optional<CompletionList> completion(TextDocumentPositionParams params) {
         prepareFile(params.textDocument.uri);
-        return includeCompletionFeature.handle(params, files.get(params.textDocument.uri));
+        var feature = features.stream().filter(feature2 -> feature2 instanceof CompletionFeature &&((CompletionFeature)feature2).canComplete(params, files.get(params.textDocument.uri))).findFirst();
+        if (feature.isEmpty()) {
+            return Optional.empty();
+        } else {
+            return ((CompletionFeature)feature.get()).handle(params, files.get(params.textDocument.uri));
+        }
+        
     }
     
 

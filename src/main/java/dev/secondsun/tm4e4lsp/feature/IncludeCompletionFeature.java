@@ -93,8 +93,9 @@ public class IncludeCompletionFeature implements CompletionFeature {
 
     @Override
     public boolean canComplete(TextDocumentPositionParams params, List<String> fileContent) {
-        // TODO Auto-generated method stub
-        return false;
+        var line = fileContent.get(params.position.line).trim();
+        var leftOfCursor = line.substring(0,params.position.character).trim();
+        return leftOfCursor.toUpperCase().startsWith(".INCLUDE");
     }
 
 

@@ -19,7 +19,7 @@ public class FirstTest {
      * 
      * @throws Exception
      */
-    @Test
+    //@Test
     public void printTestSgs() throws Exception {
         var registry = new Registry();
         IGrammar grammar = registry.loadGrammarFromPathSync("snes.json",

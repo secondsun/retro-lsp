@@ -1,15 +1,10 @@
 package dev.secondsun.tm4e4lsp.feature;
 
 import java.io.File;
-import java.io.FilenameFilter;
-import java.text.StringCharacterIterator;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
-import java.util.stream.IntStream;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;

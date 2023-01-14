@@ -46,6 +46,12 @@
           ],
           "default": "off",
           "description": "Traces the communication between VSCode and the language server."
+        },
+        "retroca65.libSFXRoot": {
+          "scope": "window",
+          "type": "string",
+          "default": "../libSFX",
+          "description": "The root of the libSFX library relative to this project."
         }
       }
     }

@@ -2,6 +2,8 @@ package dev.secondsun.tm4e4lsp;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -10,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Logger;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import dev.secondsun.lsp.CompletionList;
@@ -46,6 +49,7 @@ public class CC65LanguageServer extends LanguageServer {
     private final List<Feature<?, ?>> features = new ArrayList<>();
     private IncludeCompletionFeature includeCompletionFeature;
     private DirectiveCompletionFeature commandCompletionFeature;
+    private Path libSFXRoot;
 
     private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
 
@@ -53,13 +57,14 @@ public class CC65LanguageServer extends LanguageServer {
         this.client = client;
         try {
             this.fileService = fileService;
+            
             this.registry = new Registry();
 
             this.grammar = registry.loadGrammarFromPathSync("snes.json",
                     CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
             
             this.hoverFeature = new HoverFeature(grammar);
-            this.documentLinkFeature = new DocumentLinkFeature(grammar);
+            this.documentLinkFeature = new DocumentLinkFeature(grammar, this.fileService);
             this.includeCompletionFeature = new IncludeCompletionFeature();
             this.commandCompletionFeature = new DirectiveCompletionFeature();
 
@@ -77,8 +82,12 @@ public class CC65LanguageServer extends LanguageServer {
 
     @Override
     public InitializeResult initialize(InitializeParams params) {
+
+        
+        LOG.info("initialize");
+        LOG.info(new Gson().toJson(params));
         this.workspaceRoot = params.rootUri;
-            
+        this.fileService.addRepository(workspaceRoot);
         var initializeData = new JsonObject();
         for (Feature<?, ?> feature : features) {
             feature.initialize(initializeData);
@@ -92,6 +101,13 @@ public class CC65LanguageServer extends LanguageServer {
     }
 
     public void didChangeConfiguration(dev.secondsun.lsp.DidChangeConfigurationParams params) {
+        LOG.info("didChangeConfiguration");
+        
+        var libSFXRootParam = params.settings.get("retroca65").getAsJsonObject().get("libSFXRoot").getAsString();
+        this.libSFXRoot = Paths.get(this.workspaceRoot).resolve(libSFXRootParam);
+        this.fileService.addRepository(this.libSFXRoot.toUri());
+        LOG.info(new Gson().toJson(params));
+        LOG.info(this.libSFXRoot.toString());
 
     };
 

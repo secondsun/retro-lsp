@@ -16,15 +16,17 @@ import dev.secondsun.lsp.DocumentLinkParams;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
+import dev.secondsun.tm4e4lsp.FileService;
 import dev.secondsun.tm4e4lsp.util.Util;
 
 public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<DocumentLink>> {
     private static final Logger LOG = Logger.getLogger(DocumentLinkFeature.class.getName());
 
     private IGrammar grammar;
-
-    public DocumentLinkFeature(IGrammar grammar) {
+    private final  FileService fs;
+    public DocumentLinkFeature(IGrammar grammar, FileService fileService) {
         this.grammar = grammar;
+        this.fs = fileService;
 	}
     @Override
     public void initialize(JsonObject initializationData) {
@@ -39,20 +41,27 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
     public Optional<List<DocumentLink>> handle(DocumentLinkParams params, List<String>  fileContent) {
         
         List<DocumentLink> links = new ArrayList<>();
-        var parentDir = new File(params.textDocument.uri).getParent();
+        
         IntStream.range(0, fileContent.size()).forEach(idx -> {
 
             var line = fileContent.get(idx);
             if (Util.isIncludeDirective(line)) {
                 try {
                     var fileName = line.split(";")[0].split("\"")[1];
-                    var link = new DocumentLink();
+                    LOG.info(fileName);
+                    var files = fs.find(URI.create(fileName));
+                    LOG.info(files.stream().map(Object::toString).collect(Collectors.joining("\n\t")));
+                    for (URI file : files) {
+
+                        var link = new DocumentLink();
+                        link.target = file.toString();
+                        link.range = new Range(new Position(idx, line.indexOf(fileName)),
+                                              new Position(idx,  line.indexOf(fileName)+fileName.length()));
+                        links.add(link);
+                        LOG.info(link.target);
+                    }
                     
-                    link.target = new File(parentDir, fileName).toURI().toString();
-                    link.range = new Range(new Position(idx, line.indexOf(fileName)),
-                                          new Position(idx,  line.indexOf(fileName)+fileName.length()));
-                    links.add(link);
-                    LOG.info(link.target);
+                    
                 } catch (ArrayIndexOutOfBoundsException ignore) {}
             }
         });

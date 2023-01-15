@@ -41,7 +41,7 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
     public Optional<List<DocumentLink>> handle(DocumentLinkParams params, List<String>  fileContent) {
         
         List<DocumentLink> links = new ArrayList<>();
-        
+        URI currentDir = getCurrentDirectory(params.textDocument.uri);
         IntStream.range(0, fileContent.size()).forEach(idx -> {
 
             var line = fileContent.get(idx);
@@ -49,7 +49,7 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
                 try {
                     var fileName = line.split(";")[0].split("\"")[1];
                     LOG.info(fileName);
-                    var files = fs.find(URI.create(fileName));
+                    var files = fs.find(URI.create(fileName), currentDir);
                     LOG.info(files.stream().map(Object::toString).collect(Collectors.joining("\n\t")));
                     for (URI file : files) {
 
@@ -67,6 +67,27 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
         });
 
         return Optional.of(links);
+    }
+    private URI getCurrentDirectory(URI uri) {
+        
+        
+        if (uri.isAbsolute()) {
+            var file = new File(uri);
+            if (!file.isDirectory()) {
+                return file.getParentFile().getAbsoluteFile().toURI();
+            } else {
+                return file.getAbsoluteFile().toURI();
+            }
+        }  else {
+            var path = uri.getPath();
+            if (path.indexOf("/") == -1  || path.endsWith("/")) {
+                return uri;
+            } else {
+                return URI.create(path.substring(0, path.lastIndexOf("/")) + "/");
+            }
+
+        }
+
     }
 
 }

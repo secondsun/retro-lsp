@@ -50,8 +50,8 @@
         "retroca65.libSFXRoot": {
           "scope": "window",
           "type": "string",
-          "default": "../libSFX",
-          "description": "The root of the libSFX library relative to this project."
+          "default": "./libSFX/includes",
+          "description": "The root of the libSFX includes directory relative to this window."
         }
       }
     }

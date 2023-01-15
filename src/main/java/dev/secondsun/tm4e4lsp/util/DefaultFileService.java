@@ -10,8 +10,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.logging.Logger;
 
-import com.oracle.truffle.api.dsl.TypeSystem;
-
 import dev.secondsun.tm4e4lsp.FileService;
 
 public class DefaultFileService implements FileService{
@@ -19,7 +17,7 @@ public class DefaultFileService implements FileService{
     private Set<URI> repositories = new HashSet<>();
     private static final Logger LOG = Logger.getAnonymousLogger();
     @Override
-    public FileService addRepository(URI repoURI) {
+    public FileService addSearchPath(URI repoURI) {
         if (Paths.get(repoURI).toFile().exists()) {
             repositories.add(repoURI);
         } else {
@@ -36,10 +34,17 @@ public class DefaultFileService implements FileService{
 
 
     @Override
-    public List<URI> find(URI file) {
+    public List<URI> find(URI file, URI... optionalSearchPaths) {
+        
+        //We're allocating a copy of the localRepos and adding optionalSearchPaths
+        var localRepos = new ArrayList<>(this.repositories);
+        if (optionalSearchPaths != null && optionalSearchPaths.length >0) {
+            localRepos.addAll(List.of(optionalSearchPaths));
+        }
+
         List<URI> list = new ArrayList<>();
         LOG.info(file.toString());
-        repositories.forEach(repo->{
+        localRepos.forEach(repo->{
             var pathForRepo = Paths.get(repo).resolve(file.toString()).toFile();
             LOG.info(pathForRepo.getAbsolutePath());
             if (pathForRepo.exists()) {

@@ -36,11 +36,11 @@ public void linkToLibSFXinMultipleWorkspaces() throws Exception {
     
     // src/test/resources/workspace1
     File file = new File(classLoader.getResource("workspace1").getFile());
-    fileService.addRepository(file.toURI());
+    fileService.addSearchPath(file.toURI());
     
     // src/test/resources/workspace2
     file = new File(classLoader.getResource("workspace2").getFile());
-    fileService.addRepository(file.toURI());
+    fileService.addSearchPath(file.toURI());
 
     var results = fileService.find(new URI("libSFX.i"));
     assertEquals(2, results.size());
@@ -49,16 +49,11 @@ public void linkToLibSFXinMultipleWorkspaces() throws Exception {
         
     var feature = new DocumentLinkFeature(grammar, fileService);
     var params = new DocumentLinkParams();
-    params.textDocument = new TextDocumentIdentifier(URI.create("libSFX.i"));
+    params.textDocument = new TextDocumentIdentifier(URI.create("file:/./libSFX.i"));
     
     var result = feature.handle(params, fileService.readLines(null, null)).get();
     assertEquals(2, result.size());
 
-}
-
-@Test
-public void canAddAndRemoveWorkspaces() {
-    Assertions.fail("DocumentLink needs to be able to resolve to both the libSFX includes directory and relative to the current file. ");
 }
 
 }

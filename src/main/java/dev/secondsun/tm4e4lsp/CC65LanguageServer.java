@@ -87,7 +87,7 @@ public class CC65LanguageServer extends LanguageServer {
         LOG.info("initialize");
         LOG.info(new Gson().toJson(params));
         this.workspaceRoot = params.rootUri;
-        this.fileService.addRepository(workspaceRoot);
+        this.fileService.addSearchPath(workspaceRoot);
         var initializeData = new JsonObject();
         for (Feature<?, ?> feature : features) {
             feature.initialize(initializeData);
@@ -105,7 +105,7 @@ public class CC65LanguageServer extends LanguageServer {
         
         var libSFXRootParam = params.settings.get("retroca65").getAsJsonObject().get("libSFXRoot").getAsString();
         this.libSFXRoot = Paths.get(this.workspaceRoot).resolve(libSFXRootParam);
-        this.fileService.addRepository(this.libSFXRoot.toUri());
+        this.fileService.addSearchPath(this.libSFXRoot.toUri());
         LOG.info(new Gson().toJson(params));
         LOG.info(this.libSFXRoot.toString());
 

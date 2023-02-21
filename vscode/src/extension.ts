@@ -34,8 +34,8 @@ export function activate(context: ExtensionContext) {
         revealOutputChannelOn: RevealOutputChannelOn.Info // never
     }
 
-    //let launcher = Path.resolve('C:\\Users\\secon\\Projects\\retro-lsp\\target\\tm4e4lsp.exe'); //graalvm (build in 51s - 7 MB)
-     let launcher = Path.resolve('C:\\Users\\secon\\Projects\\retro-lsp\\dist\\windows\\bin\\launcher.bat'); //jlink  (build in 10s? - 40mb)
+    let launcher = Path.resolve('C:\\Users\\secon\\Projects\\retro-lsp\\target\\tm4e4lsp.exe'); //graalvm (build in 51s - 7 MB)
+     //let launcher = Path.resolve('C:\\Users\\secon\\Projects\\retro-lsp\\dist\\windows\\bin\\launcher.bat'); //jlink  (build in 10s? - 40mb)
     console.log(launcher);
     
     // Start the child java process

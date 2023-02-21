@@ -46,7 +46,7 @@ public class IncludeCompletionFeature implements CompletionFeature {
         var stringLeftOfCursor = line.substring(0, params.position.character);// I think that you can't replace the string before the cursor
         
         LOG.info(stringLeftOfCursor);
-        var filePrefix = stringLeftOfCursor.contains("\"")?stringLeftOfCursor.split("\"")[1]:"";
+        var filePrefix = getPrefix(stringLeftOfCursor);
         
         LOG.info(filePrefix);
         var parentDir = new File(params.textDocument.uri).getParentFile();
@@ -89,6 +89,16 @@ public class IncludeCompletionFeature implements CompletionFeature {
         }
         LOG.info("End Completion");        
         return Optional.of(list);
+    }
+
+    private String getPrefix(String stringLeftOfCursor) {
+        var testArray = stringLeftOfCursor.split("\"");
+        if (testArray.length>1) {
+            return testArray[1];
+        } else {
+            return "";
+        }
+        
     }
 
     @Override

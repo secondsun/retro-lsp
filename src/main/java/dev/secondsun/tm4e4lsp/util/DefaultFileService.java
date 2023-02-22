@@ -29,7 +29,9 @@ public class DefaultFileService implements FileService{
 
     @Override
     public List<String> readLines(URI fileUri, URI workSpaceUri) throws IOException {
-        return Util.readLines(new FileInputStream(Paths.get(fileUri).toFile()));
+        try (var stream = new FileInputStream(Paths.get(fileUri).toFile())) {
+            return Util.readLines(stream);
+        }
     }
 
 

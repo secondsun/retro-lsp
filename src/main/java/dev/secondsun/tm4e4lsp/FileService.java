@@ -22,7 +22,7 @@ public interface FileService {
 	
 	default FileService addSearchPath(URI repoURI) {return this;};
 
-	List<String> readLines(URI fileUri, URI searchPath ) throws IOException;
+	List<String> readLines(URI fileUri ) throws IOException;
 	default List<URI> find(URI file, URI... optionalSearchPaths) {return new ArrayList<>();};
 
 }

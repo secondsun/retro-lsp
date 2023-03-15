@@ -87,6 +87,7 @@ public class CC65LanguageServer extends LanguageServer {
         LOG.info("initialize");
         LOG.info(new Gson().toJson(params));
         this.workspaceRoot = params.rootUri;
+
         this.fileService.addSearchPath(workspaceRoot);
         var initializeData = new JsonObject();
         for (Feature<?, ?> feature : features) {
@@ -161,7 +162,7 @@ public class CC65LanguageServer extends LanguageServer {
     private void prepareFile(URI uri) {
         files.computeIfAbsent(uri, (key) -> {
             try {
-                return fileService.readLines(key, workspaceRoot);
+                return fileService.readLines(key);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

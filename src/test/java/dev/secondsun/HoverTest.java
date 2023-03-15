@@ -21,7 +21,7 @@ public class HoverTest {
 
     @Test
     public void hoverGSUOpCodes() {
-        CC65LanguageServer server = new CC65LanguageServer((uri, ignore)->{
+        CC65LanguageServer server = new CC65LanguageServer((uri)->{
             var sgsProgram = Util.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
             return Arrays.asList(sgsProgram.split("\n"));
         }, null);
@@ -37,7 +37,7 @@ public class HoverTest {
 
     @Test
     public void nohoverIfNotGSUOpCode() {
-        CC65LanguageServer server = new CC65LanguageServer( (uri, ignore)->{
+        CC65LanguageServer server = new CC65LanguageServer( (uri)->{
             var sgsProgram = Util.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
             return Arrays.asList(sgsProgram.split("\n"));
         }, null);

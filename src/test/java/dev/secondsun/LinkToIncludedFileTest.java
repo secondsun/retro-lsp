@@ -29,7 +29,7 @@ public void linkToLibSFXinMultipleWorkspaces() throws Exception {
            CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
     
     var fileService = new DefaultFileService(){@Override
-    public List<String> readLines(URI fileUri, URI workSpaceUri) throws IOException {
+    public List<String> readLines(URI fileUri) throws IOException {
         return List.of(".include \"libSFX.i\"");
     }};
     ClassLoader classLoader = getClass().getClassLoader();
@@ -51,7 +51,7 @@ public void linkToLibSFXinMultipleWorkspaces() throws Exception {
     var params = new DocumentLinkParams();
     params.textDocument = new TextDocumentIdentifier(URI.create("file:/./libSFX.i"));
     
-    var result = feature.handle(params, fileService.readLines(null, null)).get();
+    var result = feature.handle(params, fileService.readLines(null)).get();
     assertEquals(2, result.size());
 
 }

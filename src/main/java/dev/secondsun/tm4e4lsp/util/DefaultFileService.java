@@ -1,5 +1,6 @@
 package dev.secondsun.tm4e4lsp.util;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -28,10 +29,18 @@ public class DefaultFileService implements FileService{
 
 
     @Override
-    public List<String> readLines(URI fileUri, URI workSpaceUri) throws IOException {
-        try (var stream = new FileInputStream(Paths.get(fileUri).toFile())) {
-            return Util.readLines(stream);
+    public List<String> readLines(final URI fileUri) throws IOException {
+
+        final var fileToRead = repositories.stream().map(it -> new File(it.resolve(fileUri))).filter(File::exists).findFirst();
+
+        if (fileToRead.isPresent()) {
+            var file  = fileToRead.get();
+            try (var stream = new FileInputStream(file)) {
+                return Util.readLines(stream);
+            }
         }
+        return new ArrayList<>();
+        
     }
 
 
@@ -45,7 +54,7 @@ public class DefaultFileService implements FileService{
         }
 
         List<URI> list = new ArrayList<>();
-        LOG.info(file.toString());
+
         localRepos.forEach(repo->{
             var pathForRepo = Paths.get(repo).resolve(file.toString()).toFile();
             LOG.info(pathForRepo.getAbsolutePath());

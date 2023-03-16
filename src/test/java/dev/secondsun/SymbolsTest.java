@@ -1,5 +1,6 @@
 package dev.secondsun;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
@@ -16,7 +17,8 @@ import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.registry.Registry;
 import dev.secondsun.tm4e4lsp.CC65LanguageServer;
 import dev.secondsun.tm4e4lsp.util.DefaultFileService;
-
+import dev.secondsun.tm4e4lsp.util.SymbolService;
+import dev.secondsun.tm4e4lsp.util.Location;
 /**
  * This is a suite of tests that test 
  *   1) symbol identification 
@@ -33,10 +35,7 @@ public class SymbolsTest {
      */
     @Test
     public void canIdentifySymbolDefinition() throws Exception {
-        var registry = new Registry();
-        IGrammar grammar = registry.loadGrammarFromPathSync("snes.json",
-               CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
-        
+        var symbolService = new SymbolService();
         var fileService = new DefaultFileService();
 
         ClassLoader classLoader = getClass().getClassLoader();
@@ -44,15 +43,13 @@ public class SymbolsTest {
         File file = new File(classLoader.getResource("symbolTest").getFile());
         fileService.addSearchPath(file.toURI());
 
-        System.out.println(file.listFiles((FilenameFilter) (dir, name) -> name.equalsIgnoreCase("symbol.s"))[0].toURI());
 
         var lines = fileService.readLines(file.listFiles((FilenameFilter) (dir, name) -> name.equalsIgnoreCase("symbol.s"))[0].toURI());
         
-        lines.forEach((it)->{
-            System.out.println(new GsonBuilder().create().toJson(grammar.tokenizeLine(it)));
-        });
+        symbolService.extractDefinitions(URI.create("file:/C:/Users/secon/Projects/retro-lsp/target/test-classes/symbolTest/symbol.s"), lines);
 
-        assertTrue(lines.get(0).substring(0, 8).equals("labelDef"));
+        var location = symbolService.getLocation("labelDef");
+        assertEquals(new Location(URI.create("file:/C:/Users/secon/Projects/retro-lsp/target/test-classes/symbolTest/symbol.s"), 0,0,9), location);
         
         
 

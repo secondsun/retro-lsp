@@ -25,12 +25,6 @@
 			"name": "comment.line.semicolon"
 		},
 		{
-			"begin": "/\\*\\*",
-			
-			"end": "\\*\\*/",
-			"name": "comment.block.c"
-		},
-		{
 			"match": "\\b(?i:R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12|R13|R14|R15|SP|LR|PC)\\b",
 			"name": "support.function.pseudo"
 		},
@@ -79,7 +73,7 @@
 		},
 		{
 			"match": "(\\.)?\\b(?i:a16|a8|addr|align|asciiz|assert|autoimport|bankbytes|bss|byt|byte|case|charmap|code|condes|constructor|data|dbyt|debuginfo|def|define|defined|delmac|delmacro|destructor|dword|else|elseif|end|endenum|endif|endmac|endmacro|endproc|endrep|endrepeat|endscope|endstruct|endunion|enum|error|exitmac|exitmacro|export|exportzp|faraddr|fatal|feature|fileopt|fopt|forceimport|global|globalzp|hibytes|i16|i8|if|ifblank|ifconst|ifdef|ifnblank|ifndef|ifnref|ifp02|ifp816|ifpc02|ifpsc02|ifref|import|importzp|incbin|include|interruptor|linecont|list|listbytes|lobytes|local|localchar|mac|macpack|macro|org|out|p02|p816|pagelen|pagelength|pc02|popcpu|popseg|proc|psc02|pushcpu|pushseg|reloc|repeat|res|rodata|scope|segment|set|setcpu|smart|struct|tag|undef|undefine|union|warning|word|zeropage)\\b",
-			"name": "storage.modifier"
+			"name": "support.function.pseudo"
 		},
 		{
 			"match": "\\b(CPU_6502|CPU_65SC02|CPU_65C02|CPU_65816|CPU_SWEET16|CPU_HUC6280|CPU_ISET_6502|CPU_ISET_65SC02|CPU_ISET_65C02|CPU_ISET_65816|CPU_ISET_SWEET16|CPU_ISET_HUC6280|__APPLE2__|__APPLE2ENH__|__ATARI__|__ATARIXL__|__ATMOS__|__BBC__|__C128__|__C16__|__C64__|__CBM__|__CBM510__|__CBM610__|__GEOS__|__GEOS_APPLE__|__GEOS_CBM__|__LUNIX__|__LYNX__|__NES__|__PET__|__PLUS4__|__SIM6502__|__SIM65C02__|__SUPERVISION__|__VIC20__)\\b",

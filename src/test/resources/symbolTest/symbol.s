@@ -1,5 +1,4 @@
 labelDef: ;comment comment
   .res 16
-
-lda     #labelDef
+lda     #labelDef:
 sta     (labelDef), y

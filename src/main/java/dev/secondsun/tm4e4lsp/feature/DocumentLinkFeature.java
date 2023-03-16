@@ -16,7 +16,7 @@ import dev.secondsun.lsp.DocumentLinkParams;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
-import dev.secondsun.tm4e4lsp.FileService;
+import dev.secondsun.tm4e4lsp.util.FileService;
 import dev.secondsun.tm4e4lsp.util.Util;
 
 public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<DocumentLink>> {

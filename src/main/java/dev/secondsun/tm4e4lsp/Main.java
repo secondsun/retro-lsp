@@ -9,6 +9,7 @@ import java.util.logging.Logger;
 
 import dev.secondsun.lsp.LSP;
 import dev.secondsun.tm4e4lsp.util.DefaultFileService;
+import dev.secondsun.tm4e4lsp.util.FileService;
 import dev.secondsun.tm4e4lsp.util.Util;
 
 public class Main {

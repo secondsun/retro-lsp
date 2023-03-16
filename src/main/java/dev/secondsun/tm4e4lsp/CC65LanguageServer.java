@@ -24,6 +24,7 @@ import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.InitializeResult;
 import dev.secondsun.lsp.LanguageClient;
 import dev.secondsun.lsp.LanguageServer;
+import dev.secondsun.lsp.Location;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.registry.Registry;
@@ -33,6 +34,8 @@ import dev.secondsun.tm4e4lsp.feature.DocumentLinkFeature;
 import dev.secondsun.tm4e4lsp.feature.Feature;
 import dev.secondsun.tm4e4lsp.feature.HoverFeature;
 import dev.secondsun.tm4e4lsp.feature.IncludeCompletionFeature;
+import dev.secondsun.tm4e4lsp.util.FileService;
+import dev.secondsun.tm4e4lsp.util.SymbolService;
 
 public class CC65LanguageServer extends LanguageServer {
 
@@ -45,26 +48,31 @@ public class CC65LanguageServer extends LanguageServer {
     
     private final HoverFeature hoverFeature;
     private DocumentLinkFeature documentLinkFeature;
-    
+    private final GoToDefinitionLinkFeature gotoDefinitionLinkFeature;
     private final List<Feature<?, ?>> features = new ArrayList<>();
     private IncludeCompletionFeature includeCompletionFeature;
     private DirectiveCompletionFeature commandCompletionFeature;
     private Path libSFXRoot;
+    private SymbolService symbolService;
 
     private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
 
     public CC65LanguageServer(FileService fileService, LanguageClient client) {
         this.client = client;
         try {
+            
             this.fileService = fileService;
             
             this.registry = new Registry();
 
             this.grammar = registry.loadGrammarFromPathSync("snes.json",
-                    CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
-            
+            CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
+    
+            this.symbolService = new SymbolService(registry, grammar);
+
             this.hoverFeature = new HoverFeature(grammar);
             this.documentLinkFeature = new DocumentLinkFeature(grammar, this.fileService);
+            this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature(grammar, this.fileService, this.symbolService);
             this.includeCompletionFeature = new IncludeCompletionFeature();
             this.commandCompletionFeature = new DirectiveCompletionFeature();
 
@@ -154,6 +162,14 @@ public class CC65LanguageServer extends LanguageServer {
         return documentLinkFeature.handle(params, files.get(params.textDocument.uri)).orElse(new ArrayList<>());
     }
 
+    @Override
+    public Optional<List<Location>> gotoDefinition(TextDocumentPositionParams params) {
+        LOG.info("Goto Definition  " + params.toString());
+        prepareFile(params.textDocument.uri);
+
+        return gotoDefinitionLinkFeature.handle(params, files.get(params.textDocument.uri));
+    }
+
     /**
      * If a file for the URI has not been read, read it.
      * 
@@ -162,7 +178,9 @@ public class CC65LanguageServer extends LanguageServer {
     private void prepareFile(URI uri) {
         files.computeIfAbsent(uri, (key) -> {
             try {
-                return fileService.readLines(key);
+                var lines = fileService.readLines(key);
+                symbolService.extractDefinitions(uri, lines);
+                return lines;
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

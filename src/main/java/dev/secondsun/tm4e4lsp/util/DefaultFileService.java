@@ -11,8 +11,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.logging.Logger;
 
-import dev.secondsun.tm4e4lsp.FileService;
-
 public class DefaultFileService implements FileService{
 
     private Set<URI> repositories = new HashSet<>();

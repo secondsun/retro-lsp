@@ -32,6 +32,7 @@ import dev.secondsun.tm4e4lsp.feature.CompletionFeature;
 import dev.secondsun.tm4e4lsp.feature.DirectiveCompletionFeature;
 import dev.secondsun.tm4e4lsp.feature.DocumentLinkFeature;
 import dev.secondsun.tm4e4lsp.feature.Feature;
+import dev.secondsun.tm4e4lsp.feature.GoToDefinitionLinkFeature;
 import dev.secondsun.tm4e4lsp.feature.HoverFeature;
 import dev.secondsun.tm4e4lsp.feature.IncludeCompletionFeature;
 import dev.secondsun.tm4e4lsp.util.FileService;
@@ -72,11 +73,12 @@ public class CC65LanguageServer extends LanguageServer {
 
             this.hoverFeature = new HoverFeature(grammar);
             this.documentLinkFeature = new DocumentLinkFeature(grammar, this.fileService);
-            this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature(grammar, this.fileService, this.symbolService);
+            this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature(grammar,  this.symbolService);
             this.includeCompletionFeature = new IncludeCompletionFeature();
             this.commandCompletionFeature = new DirectiveCompletionFeature();
 
             features.add(includeCompletionFeature);
+            features.add(gotoDefinitionLinkFeature);
             features.add(hoverFeature);
             features.add(documentLinkFeature);
             features.add(commandCompletionFeature);

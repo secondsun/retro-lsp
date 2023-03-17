@@ -1,9 +1,10 @@
-package dev.secondsun.tm4e4lsp;
+package dev.secondsun.tm4e4lsp.feature;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import com.google.gson.JsonObject;
 
 import dev.secondsun.lsp.Location;
 import dev.secondsun.lsp.Position;
@@ -11,21 +12,18 @@ import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.grammar.IToken;
-import dev.secondsun.tm4e.core.grammar.ITokenizeLineResult;
-import dev.secondsun.tm4e4lsp.util.FileService;
 import dev.secondsun.tm4e4lsp.util.SymbolService;
 
-public class GoToDefinitionLinkFeature {
+public class GoToDefinitionLinkFeature implements Feature<TextDocumentPositionParams, List<Location>>{
 
     private IGrammar grammar;
-    private FileService fileService;
     private SymbolService symbolService;
-    public GoToDefinitionLinkFeature(IGrammar grammar, FileService fileService, SymbolService symbolService) {
+    public GoToDefinitionLinkFeature(IGrammar grammar, SymbolService symbolService) {
         this.grammar = grammar;
-        this.fileService = fileService;
         this.symbolService = symbolService;
     }
 
+   
     public Optional<List<Location>> handle(TextDocumentPositionParams params, List<String> list) {
         var line = list.get(params.position.line);
         var tokens = grammar.tokenizeLine(line);
@@ -43,6 +41,14 @@ public class GoToDefinitionLinkFeature {
             }
         }
         return Optional.empty();
+    }
+
+
+    @Override
+    public void initialize(JsonObject initializationData) {
+        var definitionOptions = new JsonObject();
+        definitionOptions.addProperty("workDoneProgress", false);
+        initializationData.add("definitionProvider", definitionOptions);
     }
 
 }

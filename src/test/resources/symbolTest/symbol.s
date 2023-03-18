@@ -10,3 +10,4 @@ sta     (labelDef), y
 .endstruct
 
 iwt r1, #(camera_mem + camera::eye + vector3::xPos)
+ibt r3, #.sizeof(edgerow)

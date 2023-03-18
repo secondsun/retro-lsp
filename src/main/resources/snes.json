@@ -64,6 +64,10 @@
 			"name": "variable.other.readwrite.assembly variable.other.definition"
 		},
 		{
+			"match": "\\b::[A-Za-z_][A-Za-z0-9_]*\\b",
+			"name": "variable.other.readwrite.assembly variable.other.readwrite.dereference"
+		},
+		{
 			"match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b",
 			"name": "variable.other.readwrite.assembly"
 		},

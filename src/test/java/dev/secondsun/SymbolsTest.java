@@ -61,6 +61,30 @@ public class SymbolsTest {
         
     }
 
+/**
+     * A symbol is defined when it is the only element on a line and ends with a ":"
+     * There are also anonymous symbols.
+     * @throws Exception
+     */
+    @Test
+    public void canIdentifyStructDefinition() throws Exception {
+        var symbolService = new SymbolService();
+        var fileService = new DefaultFileService();
+
+        ClassLoader classLoader = getClass().getClassLoader();
+        // src/test/resources/workspace1
+        File file = new File(classLoader.getResource("symbolTest").getFile());
+        fileService.addSearchPath(file.toURI());
+
+
+        var lines = fileService.readLines(file.listFiles((FilenameFilter) (dir, name) -> name.equalsIgnoreCase("symbol.s"))[0].toURI());
+        symbolService.extractDefinitions(SYMBOLS_URI, lines);
+
+        var location = symbolService.getLocation("camera");
+        assertEquals(new Location(SYMBOLS_URI, 5,0,14), location);
+        
+    }
+
 @Test
 /**
  * Keep disabled for debugging

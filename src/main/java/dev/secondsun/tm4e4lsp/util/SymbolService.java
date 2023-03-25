@@ -52,9 +52,21 @@ public class SymbolService {
             // only one definition per line so find first is ok
             var foundLabelDef = Arrays.stream(tokenized.getTokens())
                     .filter(token -> token.getScopes().contains(VARIABLE_DEFINITION)).findFirst();
-            // -1 to remove the colon
-            foundLabelDef.ifPresent(it -> addDefinition(line.substring(it.getStartIndex(), it.getEndIndex() - 1),
-                    new Location(fileName, idx, it.getStartIndex(), it.getEndIndex())));
+            
+            
+            foundLabelDef.ifPresent(
+                token ->{
+                    var stringToken = line.substring(token.getStartIndex(), token.getEndIndex());
+                    if (stringToken.endsWith(":")) {
+                        // remove the colon
+                        addDefinition(stringToken.replace(":", ""),
+                                new Location(fileName, idx, token.getStartIndex(), token.getEndIndex()));
+                        } else if (stringToken.endsWith("=")) {
+                            addDefinition(stringToken.split("=")[0].trim(),
+                                new Location(fileName, idx, token.getStartIndex(), token.getEndIndex()));
+                        }        
+                }
+            );
 
             // find structure
             {

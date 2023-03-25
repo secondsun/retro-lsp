@@ -1,6 +1,7 @@
 package dev.secondsun.tm4e4lsp.feature;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,14 +42,27 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
     public Optional<List<DocumentLink>> handle(DocumentLinkParams params, List<String>  fileContent) {
         
         List<DocumentLink> links = new ArrayList<>();
-        URI currentDir = getCurrentDirectory(params.textDocument.uri);
+        URI currentDir;
+        try {
+            currentDir = getCurrentDirectory(params.textDocument.uri);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         IntStream.range(0, fileContent.size()).forEach(idx -> {
 
             var line = fileContent.get(idx);
             if (Util.isIncludeDirective(line)) {
                 try {
+                    //Ok we're parsing out the filename from the line.
+                    //the format is .include "fileName" ; comment
+                    // this is pretty hardcoded in ca65 so I'm not feeling 
+                    // bad about being messy here though using the grammar would be smarter
+
+                    //We're splitting comments, then splitting the string
                     var fileName = line.split(";")[0].split("\"")[1];
                     LOG.info(fileName);
+                    
+                    //Find knows about relative files and resolves to files on the hard disk.
                     var files = fs.find(URI.create(fileName), currentDir);
                     LOG.info(files.stream().map(Object::toString).collect(Collectors.joining("\n\t")));
                     for (URI file : files) {
@@ -68,18 +82,18 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
 
         return Optional.of(links);
     }
-    private URI getCurrentDirectory(URI uri) {
+    private URI getCurrentDirectory(URI uri) throws IOException {
         
         
         if (uri.isAbsolute()) {
-            var file = new File(uri);
+            var file = new File(uri.getRawSchemeSpecificPart());
             if (!file.isDirectory()) {
-                return file.getParentFile().getAbsoluteFile().toURI();
+                return file.getParentFile().getCanonicalFile().toURI();
             } else {
-                return file.getAbsoluteFile().toURI();
+                return file.getCanonicalFile().toURI();
             }
         }  else {
-            var path = uri.getPath();
+            var path = uri.getRawSchemeSpecificPart();
             if (path.indexOf("/") == -1  || path.endsWith("/")) {
                 return uri;
             } else {

@@ -33,6 +33,12 @@ public final class Util {
     public static String getTokenText(String line, IToken token) {
         var start = token.getStartIndex();
         var end = token.getEndIndex();
+        if (start < 0) {
+            start = 0;
+        }
+        if (end > line.length()) {
+            end = line.length();
+        }
         return line.substring(start, end);
     }
 

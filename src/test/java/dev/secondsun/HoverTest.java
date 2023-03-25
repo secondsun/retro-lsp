@@ -3,29 +3,36 @@ package dev.secondsun;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Optional;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import dev.secondsun.lsp.Hover;
+import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.TextDocumentIdentifier;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.tm4e4lsp.CC65LanguageServer;
-import dev.secondsun.tm4e4lsp.util.Util;
+
 
 public class HoverTest {
 
     @Test
-    public void hoverGSUOpCodes() {
-        CC65LanguageServer server = new CC65LanguageServer((uri)->{
-            var sgsProgram = Util.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
-            return Arrays.asList(sgsProgram.split("\n"));
-        }, null);
-        TextDocumentIdentifier textDocument = new TextDocumentIdentifier(URI.create("test.sgs"));
+    public void hoverGSUOpCodes() throws IOException {
+        CC65LanguageServer server = new CC65LanguageServer();
+        
+        InitializeParams params = new InitializeParams();
+        params.rootUri = getTestDirURI();
+
+        server.initialize(params);
+        TextDocumentIdentifier textDocument = new TextDocumentIdentifier(getTestFile("test.sgs"));
         Position position = new Position(11, 4);//A nop opcode
         Optional<Hover> hoverResult = server.hover(new TextDocumentPositionParams(textDocument, position));
         assertNotNull(hoverResult);
@@ -35,17 +42,26 @@ public class HoverTest {
         assertEquals("No operation", hover.contents.get(0).value);
     }
 
+    private URI getTestFile(String string) {
+        return new File(getClass().getClassLoader().getResource("includeTest/" + string).getFile()).toURI();
+    }
+
+    private URI getTestDirURI() throws IOException {
+        File file = new File(getClass().getClassLoader().getResource("includeTest/test.sgs").getFile());
+        return file.getParentFile().getCanonicalFile().toURI();
+    }
+
     @Test
-    public void nohoverIfNotGSUOpCode() {
-        CC65LanguageServer server = new CC65LanguageServer( (uri)->{
-            var sgsProgram = Util.toString(CC65LanguageServer.class.getClassLoader().getResourceAsStream(uri.toString()));
-            return Arrays.asList(sgsProgram.split("\n"));
-        }, null);
-        TextDocumentIdentifier textDocument = new TextDocumentIdentifier(URI.create("test.sgs"));
+    public void nohoverIfNotGSUOpCode() throws IOException {
+        CC65LanguageServer server = new CC65LanguageServer();
+        InitializeParams params = new InitializeParams();
+        params.rootUri = getTestDirURI();
+
+        server.initialize(params);
+        TextDocumentIdentifier textDocument = new TextDocumentIdentifier(getTestFile("test.sgs"));
         Position position = new Position(11, 1);//Whitespace
         Optional<Hover> hoverResult = server.hover(new TextDocumentPositionParams(textDocument, position));
         assertNotNull(hoverResult);
         assertTrue(hoverResult.get().contents == null);
-        
     }
 }

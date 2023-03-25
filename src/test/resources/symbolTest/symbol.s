@@ -11,3 +11,6 @@ sta     (labelDef), y
 
 iwt r1, #(camera_mem + camera::eye + vector3::xPos)
 ibt r3, #.sizeof(edgerow)
+
+bob = 2
+bob

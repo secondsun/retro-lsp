@@ -2,6 +2,7 @@ package dev.secondsun;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.File;
 import java.io.FilenameFilter;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import com.google.gson.GsonBuilder;
 
+import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.TextDocumentIdentifier;
 import dev.secondsun.lsp.TextDocumentPositionParams;
@@ -22,7 +24,7 @@ import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.registry.Registry;
 import dev.secondsun.tm4e4lsp.CC65LanguageServer;
 import dev.secondsun.tm4e4lsp.feature.GoToDefinitionLinkFeature;
-import dev.secondsun.tm4e4lsp.util.DefaultFileService;
+import dev.secondsun.tm4e4lsp.util.FileService;
 import dev.secondsun.tm4e4lsp.util.SymbolService;
 import dev.secondsun.tm4e4lsp.util.Location;
 /**
@@ -44,7 +46,7 @@ public class SymbolsTest {
     @Test
     public void canIdentifySymbolDefinition() throws Exception {
         var symbolService = new SymbolService();
-        var fileService = new DefaultFileService();
+        var fileService = new FileService();
 
         ClassLoader classLoader = getClass().getClassLoader();
         // src/test/resources/workspace1
@@ -52,13 +54,16 @@ public class SymbolsTest {
         fileService.addSearchPath(file.toURI());
 
 
-        var lines = fileService.readLines(file.listFiles((FilenameFilter) (dir, name) -> name.equalsIgnoreCase("symbol.s"))[0].toURI());
+        var lines = fileService.readLines(URI.create("./symbol.s"));
         
         symbolService.extractDefinitions(SYMBOLS_URI, lines);
 
         var location = symbolService.getLocation("labelDef");
         assertEquals(new Location(SYMBOLS_URI, 0,0,9), location);
         
+        var bobLocation = symbolService.getLocation("bob");
+        assertEquals(new Location(SYMBOLS_URI, 14,0,5), bobLocation);
+
     }
 
 /**
@@ -69,7 +74,7 @@ public class SymbolsTest {
     @Test
     public void canIdentifyStructDefinition() throws Exception {
         var symbolService = new SymbolService();
-        var fileService = new DefaultFileService();
+        var fileService = new FileService();
 
         ClassLoader classLoader = getClass().getClassLoader();
         // src/test/resources/workspace1
@@ -77,7 +82,7 @@ public class SymbolsTest {
         fileService.addSearchPath(file.toURI());
 
 
-        var lines = fileService.readLines(file.listFiles((FilenameFilter) (dir, name) -> name.equalsIgnoreCase("symbol.s"))[0].toURI());
+        var lines = fileService.readLines(URI.create("./symbol.s"));
         symbolService.extractDefinitions(SYMBOLS_URI, lines);
 
         var location = symbolService.getLocation("camera");
@@ -91,7 +96,7 @@ public class SymbolsTest {
  * @throws IOException
  */
 public void printLines() throws Exception {
-    var fileService = new DefaultFileService();
+    var fileService = new FileService();
     var registry = new Registry();
     var grammar = registry.loadGrammarFromPathSync("snes.json",
     CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
@@ -101,10 +106,54 @@ public void printLines() throws Exception {
         File file = new File(classLoader.getResource("symbolTest").getFile());
         fileService.addSearchPath(file.toURI());
 
-     fileService.readLines(file.listFiles((FilenameFilter) (dir, name) -> name.equalsIgnoreCase("symbol.s"))[0].toURI()).forEach((line)->{
+        fileService.readLines(URI.create("./symbol.s")).forEach((line)->{
         System.out.println(line);
         Arrays.stream(grammar.tokenizeLine(line).getTokens()).map(Object::toString).forEach(System.out::println);
      });
+}
+
+@Test
+@Disabled
+public void includeDocumentation() {
+    fail("Scan in docs for hovering on labels");
+}
+
+@Test
+@Disabled
+public void ifDefAndEnvVariablesSupport() {
+    fail("Respect ca65 ifdefs and have variables with scopes");
+}
+
+@Test
+public void parseFilesIncluded() {
+    CC65LanguageServer server = new CC65LanguageServer();
+        InitializeParams params = new InitializeParams();
+        params.rootUri = getTestDirURI();
+
+        server.initialize(params);
+        // from copyFromStart 261:25
+        // define copyFromStart 303:09
+        TextDocumentPositionParams gotoParams = new TextDocumentPositionParams();
+        gotoParams.position = new Position(260, 25);
+        gotoParams.textDocument = new TextDocumentIdentifier(getTestFile("SuperFX.s"));
+        var result = server.gotoDefinition(gotoParams).get().get(0);
+        assertEquals(302,result.range.start.line);
+        assertEquals(8, result.range.start.character);
+}
+
+private URI getTestFile(String string) {
+    try {
+        return new File(getClass().getClassLoader().getResource("includeTest/" + string).getFile()).getCanonicalFile().toURI();
+    } catch (IOException e) {
+        throw new RuntimeException(e);
+    }
+}
+
+@Test
+@Disabled("This seems to work in prod so consider it extra credit")
+public void libsfxTracer() {
+    fail("This method should schedule sfxRoot files to be scanned.");
+    fail("Scans should be refreshed if libsfxroot changes.");
 }
 
 /**
@@ -115,7 +164,7 @@ public void printLines() throws Exception {
     @Test
     public void canGotoSymbolDefinition() throws Exception {
         var symbolService = new SymbolService();
-        var fileService = new DefaultFileService();
+        var fileService = new FileService();
 
         ClassLoader classLoader = getClass().getClassLoader();
         // src/test/resources/workspace1
@@ -126,7 +175,7 @@ public void printLines() throws Exception {
         var grammar = registry.loadGrammarFromPathSync("snes.json",
         CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
 
-        var lines = fileService.readLines(file.listFiles((FilenameFilter) (dir, name) -> name.equalsIgnoreCase("symbol.s"))[0].toURI());
+        var lines = fileService.readLines(URI.create("./symbol.s"));
         
         symbolService.extractDefinitions(SYMBOLS_URI, lines);
 
@@ -144,6 +193,15 @@ public void printLines() throws Exception {
         assertEquals(location.line(), result.get().get(0).range.start.line);
         assertEquals(location.startIndex(), result.get().get(0).range.start.character);
         assertEquals(location.endIndex(), result.get().get(0).range.end.character);        
+    }
+    private URI getTestDirURI() {
+        File file = new File(getClass().getClassLoader().getResource("includeTest/test.sgs").getFile());
+        try {
+            return file.getParentFile().getCanonicalFile().toURI();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        
     }
 
 }

@@ -17,7 +17,7 @@ import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.registry.Registry;
 import dev.secondsun.tm4e4lsp.CC65LanguageServer;
 import dev.secondsun.tm4e4lsp.feature.DocumentLinkFeature;
-import dev.secondsun.tm4e4lsp.util.DefaultFileService;
+import dev.secondsun.tm4e4lsp.util.FileService;
 
 public class LinkToIncludedFileTest {
     
@@ -28,10 +28,7 @@ public void linkToLibSFXinMultipleWorkspaces() throws Exception {
     IGrammar grammar = registry.loadGrammarFromPathSync("snes.json",
            CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
     
-    var fileService = new DefaultFileService(){@Override
-    public List<String> readLines(URI fileUri) throws IOException {
-        return List.of(".include \"libSFX.i\"");
-    }};
+    var fileService = new FileService();
     ClassLoader classLoader = getClass().getClassLoader();
     
     // src/test/resources/workspace1
@@ -49,9 +46,9 @@ public void linkToLibSFXinMultipleWorkspaces() throws Exception {
         
     var feature = new DocumentLinkFeature(grammar, fileService);
     var params = new DocumentLinkParams();
-    params.textDocument = new TextDocumentIdentifier(URI.create("file:/./libSFX.i"));
+    params.textDocument = new TextDocumentIdentifier(URI.create("file:./libSFX.i"));
     
-    var result = feature.handle(params, fileService.readLines(null)).get();
+    var result = feature.handle(params, List.of(".include \"libSFX.i\"")).get();
     assertEquals(2, result.size());
 
 }

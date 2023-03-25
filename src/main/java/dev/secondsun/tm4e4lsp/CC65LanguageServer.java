@@ -22,7 +22,6 @@ import dev.secondsun.lsp.FileChangeType;
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.InitializeResult;
-import dev.secondsun.lsp.LanguageClient;
 import dev.secondsun.lsp.LanguageServer;
 import dev.secondsun.lsp.Location;
 import dev.secondsun.lsp.TextDocumentPositionParams;
@@ -36,15 +35,17 @@ import dev.secondsun.tm4e4lsp.feature.GoToDefinitionLinkFeature;
 import dev.secondsun.tm4e4lsp.feature.HoverFeature;
 import dev.secondsun.tm4e4lsp.feature.IncludeCompletionFeature;
 import dev.secondsun.tm4e4lsp.util.FileService;
+import dev.secondsun.tm4e4lsp.util.ProjectService;
 import dev.secondsun.tm4e4lsp.util.SymbolService;
 
 public class CC65LanguageServer extends LanguageServer {
 
-    Map<URI, List<String>> files = new HashMap<>();
+    
     private final FileService fileService;
     private Registry registry;
     private IGrammar grammar;
-    private final LanguageClient client;
+    //TODO Actually make use of language client
+    //private final LanguageClient client;
     private URI workspaceRoot;
     
     private final HoverFeature hoverFeature;
@@ -55,14 +56,15 @@ public class CC65LanguageServer extends LanguageServer {
     private DirectiveCompletionFeature commandCompletionFeature;
     private Path libSFXRoot;
     private SymbolService symbolService;
+    private ProjectService projectService;
 
     private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
-
-    public CC65LanguageServer(FileService fileService, LanguageClient client) {
-        this.client = client;
+    public static final Gson GSON = new Gson();
+    public CC65LanguageServer() {
+        
         try {
             
-            this.fileService = fileService;
+            this.fileService = new FileService();
             
             this.registry = new Registry();
 
@@ -70,7 +72,7 @@ public class CC65LanguageServer extends LanguageServer {
             CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
     
             this.symbolService = new SymbolService(registry, grammar);
-
+            this.projectService = new ProjectService(fileService, symbolService);
             this.hoverFeature = new HoverFeature(grammar);
             this.documentLinkFeature = new DocumentLinkFeature(grammar, this.fileService);
             this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature(grammar,  this.symbolService);
@@ -97,8 +99,8 @@ public class CC65LanguageServer extends LanguageServer {
         LOG.info("initialize");
         LOG.info(new Gson().toJson(params));
         this.workspaceRoot = params.rootUri;
-
-        this.fileService.addSearchPath(workspaceRoot);
+        this.projectService.includeDir(this.workspaceRoot);
+        
         var initializeData = new JsonObject();
         for (Feature<?, ?> feature : features) {
             feature.initialize(initializeData);
@@ -115,18 +117,20 @@ public class CC65LanguageServer extends LanguageServer {
         LOG.info("didChangeConfiguration");
         
         var libSFXRootParam = params.settings.get("retroca65").getAsJsonObject().get("libSFXRoot").getAsString();
-        this.libSFXRoot = Paths.get(this.workspaceRoot).resolve(libSFXRootParam);
-        this.fileService.addSearchPath(this.libSFXRoot.toUri());
+        this.libSFXRoot = Path.of(this.workspaceRoot).resolve(libSFXRootParam);
+        projectService.includeDir(this.libSFXRoot.toUri());
         LOG.info(new Gson().toJson(params));
         LOG.info(this.libSFXRoot.toString());
 
     };
 
     public void didChangeWatchedFiles(dev.secondsun.lsp.DidChangeWatchedFilesParams params) {
+        LOG.info("didChangeWatchedFiles(");
+        LOG.info(GSON.toJson(params));
         for (var change : params.changes) {
             switch(change.type) {
                 case FileChangeType.Changed: 
-                    files.remove(change.uri);
+                    projectService.refreshFileContents(change.uri);
                 break;
                 default:
                 continue;
@@ -136,12 +140,14 @@ public class CC65LanguageServer extends LanguageServer {
 
     @Override
     public Optional<CompletionList> completion(TextDocumentPositionParams params) {
-        prepareFile(params.textDocument.uri);
-        var feature = features.stream().filter(feature2 -> feature2 instanceof CompletionFeature &&((CompletionFeature)feature2).canComplete(params, files.get(params.textDocument.uri))).findFirst();
+        var file = projectService.getFileContents(params.textDocument.uri);
+        var feature = features.stream().filter(feature2 -> feature2 instanceof CompletionFeature && 
+                                                        ((CompletionFeature)feature2)
+                                                        .canComplete(params, file)).findFirst();
         if (feature.isEmpty()) {
             return Optional.empty();
         } else {
-            return ((CompletionFeature)feature.get()).handle(params, files.get(params.textDocument.uri));
+            return ((CompletionFeature)feature.get()).handle(params, file);
         }
         
     }
@@ -149,44 +155,25 @@ public class CC65LanguageServer extends LanguageServer {
 
     @Override
     public Optional<Hover> hover(TextDocumentPositionParams params) {
-        LOG.info("hover" + params.toString());
-        prepareFile(params.textDocument.uri);
+        LOG.info("hover " + GSON.toJson(params));
 
-        return hoverFeature.handle(params, files.get(params.textDocument.uri));
+        return hoverFeature.handle(params, projectService.getFileContents(params.textDocument.uri));
 
     }
 
     @Override
     public List<DocumentLink> documentLink(DocumentLinkParams params) {
-        LOG.info("DocumentLink " + params.toString());
-        prepareFile(params.textDocument.uri);
+        LOG.info("DocumentLink " + GSON.toJson(params));
 
-        return documentLinkFeature.handle(params, files.get(params.textDocument.uri)).orElse(new ArrayList<>());
+        return documentLinkFeature.handle(params, projectService.getFileContents(params.textDocument.uri)).orElse(new ArrayList<>());
     }
 
     @Override
     public Optional<List<Location>> gotoDefinition(TextDocumentPositionParams params) {
-        LOG.info("Goto Definition  " + params.toString());
-        prepareFile(params.textDocument.uri);
+        LOG.info("Goto Definition  " + GSON.toJson(params));
 
-        return gotoDefinitionLinkFeature.handle(params, files.get(params.textDocument.uri));
+        return gotoDefinitionLinkFeature.handle(params, projectService.getFileContents(params.textDocument.uri));
     }
 
-    /**
-     * If a file for the URI has not been read, read it.
-     * 
-     * @param uri the file path to load from the workspace root
-     */
-    private void prepareFile(URI uri) {
-        files.computeIfAbsent(uri, (key) -> {
-            try {
-                var lines = fileService.readLines(key);
-                symbolService.extractDefinitions(uri, lines);
-                return lines;
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        });
-    }
 
 }

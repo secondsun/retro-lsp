@@ -79,8 +79,30 @@ public class SymbolService {
                     addDefinition(def,
                             new Location(fileName, idx, 0, line.length()));
                 }
+            }// find proc
+            {
+                var split = line.split("(?i).*\\.proc");
+                if (split.length > 1) {
+
+                    var namePlusRight = split[1].trim();
+                    var tok = grammar.tokenizeLine(namePlusRight).getTokens()[0];
+                    var def = namePlusRight.subSequence(tok.getStartIndex(), tok.getEndIndex()).toString();
+                    addDefinition(def,
+                            new Location(fileName, idx, 0, line.length()));
+                }
             }
-            // find structure
+            {
+                var split = line.split("(?i).*\\.enum");
+                if (split.length > 1) {
+
+                    var namePlusRight = split[1].trim();
+                    var tok = grammar.tokenizeLine(namePlusRight).getTokens()[0];
+                    var def = namePlusRight.subSequence(tok.getStartIndex(), tok.getEndIndex()).toString();
+                    addDefinition(def,
+                            new Location(fileName, idx, 0, line.length()));
+                }
+            }
+            // find macro
             {
                 var macro = line.split("(?i).*\\.macro");
                 if (macro.length > 1) {

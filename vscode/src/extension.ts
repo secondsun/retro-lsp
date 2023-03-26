@@ -27,6 +27,8 @@ export function activate(context: ExtensionContext) {
             fileEvents: [
                 workspace.createFileSystemWatcher('Makefile'),
                 workspace.createFileSystemWatcher('**/*.s'),
+                workspace.createFileSystemWatcher('**/*.i'),
+                workspace.createFileSystemWatcher('**/*.inc'),
                 workspace.createFileSystemWatcher('**/*.sgs')
             ]
         },

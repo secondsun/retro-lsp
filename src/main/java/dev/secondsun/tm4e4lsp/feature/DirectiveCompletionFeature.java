@@ -137,9 +137,8 @@ public class DirectiveCompletionFeature implements CompletionFeature {
     public Optional<CompletionList> handle(TextDocumentPositionParams params, List<String> fileContent) {
         
         var line = fileContent.get(params.position.line);
-        LOG.log(Level.INFO, "line:"+line);
+        
         var leftOfCursor = line.substring(0,params.position.character).trim();
-        LOG.log(Level.INFO, "left:"+leftOfCursor+"\n");
         if (leftOfCursor.startsWith(".")) {
            var completionItems = CONTROL_COMMANDS.stream()
                                     .filter(cmd->cmd.startsWith(leftOfCursor.toUpperCase()))
@@ -149,8 +148,7 @@ public class DirectiveCompletionFeature implements CompletionFeature {
                                         var item = new CompletionItem();
                                         item.label = text;
                                         item.kind = CompletionItemKind.Struct;
-                                        LOG.log(Level.INFO, text);
-                                        LOG.log(Level.INFO, completionText);
+                                        
                                         item.textEdit = new TextEdit(new Range(new Position(params.position.line, params.position.character), 
                                                                                new Position(params.position.line,line.length() )), 
                                                                         completionText);

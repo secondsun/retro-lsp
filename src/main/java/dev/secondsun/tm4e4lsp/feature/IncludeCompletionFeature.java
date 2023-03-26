@@ -38,17 +38,14 @@ public class IncludeCompletionFeature implements CompletionFeature {
         if (fileContent == null || fileContent.size() < params.position.line) {
             return Optional.empty();
         }
-        LOG.info("Begin Completion");
+        
         CompletionList list = new CompletionList();
         list.items = new ArrayList<>();
         var line = fileContent.get(params.position.line);
-        LOG.info(line);
         var stringLeftOfCursor = line.substring(0, params.position.character);// I think that you can't replace the string before the cursor
         
-        LOG.info(stringLeftOfCursor);
         var filePrefix = getPrefix(stringLeftOfCursor);
         
-        LOG.info(filePrefix);
         var parentDir = new File(params.textDocument.uri).getParentFile();
         if (Util.isIncludeDirective(line)) {
             for (File file : parentDir.listFiles(File::isDirectory)) {
@@ -66,7 +63,6 @@ public class IncludeCompletionFeature implements CompletionFeature {
                                                        replacement);
 
                 list.items.add(item);
-                LOG.info("Added " + GSON.toJson(item));
             }
             for (File file : parentDir.listFiles(File::isFile)) {
                 if (!file.getName().startsWith(filePrefix)){
@@ -84,10 +80,8 @@ public class IncludeCompletionFeature implements CompletionFeature {
                                             replacement);
 
                 list.items.add(item);
-                LOG.info("Added " + GSON.toJson(item));
             }
         }
-        LOG.info("End Completion");        
         return Optional.of(list);
     }
 

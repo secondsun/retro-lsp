@@ -66,7 +66,7 @@ public class FileService {
 
         localRepos.forEach(repo->{
             var pathForRepo = Path.of(repo).resolve(file.toString()).toFile();
-            LOG.info(pathForRepo.getAbsolutePath());
+            
             if (pathForRepo.exists()) {
                 list.add(pathForRepo.toURI());
             }

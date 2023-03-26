@@ -60,11 +60,9 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
 
                     //We're splitting comments, then splitting the string
                     var fileName = line.split(";")[0].split("\"")[1];
-                    LOG.info(fileName);
                     
                     //Find knows about relative files and resolves to files on the hard disk.
                     var files = fs.find(URI.create(fileName), currentDir);
-                    LOG.info(files.stream().map(Object::toString).collect(Collectors.joining("\n\t")));
                     for (URI file : files) {
 
                         var link = new DocumentLink();
@@ -72,7 +70,7 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
                         link.range = new Range(new Position(idx, line.indexOf(fileName)),
                                               new Position(idx,  line.indexOf(fileName)+fileName.length()));
                         links.add(link);
-                        LOG.info(link.target);
+                        
                     }
                     
                     

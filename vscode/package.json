@@ -23,7 +23,8 @@
         "extensions": [
           ".sgs",
           ".s",
-          ".i"
+          ".i",
+          ".inc"
         ]
       }
     ],

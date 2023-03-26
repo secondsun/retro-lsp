@@ -52,7 +52,8 @@ public class ProjectService {
             public boolean accept(File pathname) {
                 return pathname.getName().endsWith(".s") ||
                 pathname.getName().endsWith(".sgs") ||
-                pathname.getName().endsWith(".i");
+                pathname.getName().endsWith(".i") ||
+                pathname.getName().endsWith(".inc");
             }
             
         })).forEach((file)-> {

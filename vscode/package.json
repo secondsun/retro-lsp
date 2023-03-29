@@ -54,6 +54,12 @@
           "type": "string",
           "default": "../libSFX/include",
           "description": "The root of the libSFX includes directory relative to this window."
+        },
+        "retroca65.sourceDirectory": {
+          "scope": "window",
+          "type": "string",
+          "default": ".",
+          "description": "The root of the source directory relative to this window."
         }
       }
     }

@@ -94,6 +94,7 @@ public class CC65LanguageServer extends LanguageServer {
     @Override
     public InitializeResult initialize(InitializeParams params) {
         this.workspaceRoot = params.rootUri;
+        
         this.projectService.includeDir(this.workspaceRoot);
 
         var initializeData = new JsonObject();
@@ -111,10 +112,17 @@ public class CC65LanguageServer extends LanguageServer {
     public void didChangeConfiguration(dev.secondsun.lsp.DidChangeConfigurationParams params) {
         try {
             var libSFXRootParam = params.settings.get("retroca65").getAsJsonObject().get("libSFXRoot").getAsString();
+            var sourceDirectoryParam = params.settings.get("retroca65").getAsJsonObject().get("sourceDirectory").getAsString();
             this.libSFXRoot = Path.of(this.workspaceRoot).resolve(libSFXRootParam);
+            var sourceDirectoryPath = Path.of(this.workspaceRoot).resolve(sourceDirectoryParam);
+            
             if (libSFXRoot.toFile().exists()) {
-                projectService.includeDir(this.libSFXRoot.toUri());
+                projectService.includeDir(libSFXRoot.toUri());
             }
+            if (sourceDirectoryPath.toFile().exists()) {
+                projectService.includeDir(sourceDirectoryPath.toUri());
+            }
+
         } catch (Exception ignore) {
             // ignore because I don't care about if libSFX root is setup right
         }

@@ -46,6 +46,7 @@ public class ProjectService {
     private void _includeDir(URI directory) {
         //Include everything in workspace root
         var workspacePath  = Path.of(directory);
+        System.err.println(directory.toString());
         Arrays.stream(workspacePath.toFile().listFiles(new FileFilter() {
 
             @Override

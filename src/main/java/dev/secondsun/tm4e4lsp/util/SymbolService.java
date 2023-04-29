@@ -115,6 +115,19 @@ public class SymbolService {
                 }
             }
 
+// find functions. Fuunctions are a summersism
+{
+    var macro = line.split("(?i).*function");
+    if (macro.length > 1) {
+
+        var namePlusRight = macro[1].trim();
+        var tok = grammar.tokenizeLine(namePlusRight).getTokens()[0];
+        var def = namePlusRight.subSequence(tok.getStartIndex(), tok.getEndIndex()).toString();
+        addDefinition(def,
+                new Location(fileName, idx, 0, line.length()));
+    }
+}
+
         });
 
     }

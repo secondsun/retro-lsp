@@ -1,71 +1,63 @@
-# retro-vscode README
-
-This is the README for your extension "retro-vscode". After writing up a brief description, we recommend including the following sections.
+# retro-lsp
+LSP implementation for retro game development on the Super Nintendo Entertainment System using CA65.
 
 ## Features
+### Customizable source directory
+The setting `retroca65.sourceDirectory` allows the user to specify a directory relative to the source workspace as the "root" directory.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### libSFX support
+The setting `retroca65.libSFXRoot`  allows the user to specify a directory relative to the source workspace as the "libSFXRoot" directory. 
 
-For example if there is an image subfolder under your extension project workspace:
+### Go to definition support
+Procs, labels, enums, structs, and macro references can be used to get the location of their definition.
 
-\!\[feature X\]\(images/feature-x.png\)
+### Go to included file support
+Navigate to the file specified in the ca65 `.includes` control command in source files
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### Auto complete file includes
+When using the `.include` control command, the server provides completions for directories and files.
 
-## Requirements
+### Control command completion
+Support for autocompleting many control commands
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+### SuperFX documentation hovers
+Hovering over registers constants in `.sgs` files will display related documentation
 
-## Extension Settings
+### Syntax highlighting
+Syntaxt highlighting and parsing provided by libSFX grammars
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+### Example vscode plugin
+An example vscode plugin is provided in the .vscode directory
 
-For example:
+## Possible Future Features
 
-This extension contributes the following settings:
+### Dynamic help text
+Import NaturalDocs syntax to show related help text to hovers
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+### Refactoring tools
+Rename files, and symbols
 
-## Known Issues
+### Go to usage support
+Navigate from definitions to usages and references
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+### Improved everything
+This first release is buggy, and many features are only half completed. General improvements include auto completion for appropriate control commands (similar to includes file picker).  Auto completion for constants and defined symbols will also be ideal.
 
-## Release Notes
+## Development & Release
+### Archetecture 
+TODO, but this is an easy maven project.
 
-Users appreciate release notes as you update your extension.
+In general, `CA65LanguageServer.java` initializes features and delegates to commands from the client them.
 
-### 1.0.0
+### JLink
+The 'scripts' directory includes simple linking scripts for building jlink launchers for mac, linux, and windows.
 
-Initial release of ...
+### GrallVM Navive image
+GrallVM support is in progress. Recent features broke the configuration and I haven't fixed it.
 
-### 1.0.1
+## Thanks and Contributions
 
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Java Language Server - https://github.com/georgewfraser/java-language-server
+GSON library - https://github.com/google/gson
+ca65 - https://cc65.github.io/doc/ca65.html
+libSFX - https://github.com/Optiroc/libSFX

@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 import java.util.stream.IntStream;
 
 import dev.secondsun.tm4e.core.grammar.IGrammar;
@@ -52,21 +53,19 @@ public class SymbolService {
             // only one definition per line so find first is ok
             var foundLabelDef = Arrays.stream(tokenized.getTokens())
                     .filter(token -> token.getScopes().contains(VARIABLE_DEFINITION)).findFirst();
-            
-            
+
             foundLabelDef.ifPresent(
-                token ->{
-                    var stringToken = line.substring(token.getStartIndex(), token.getEndIndex());
-                    if (stringToken.endsWith(":")) {
-                        // remove the colon
-                        addDefinition(stringToken.replace(":", ""),
-                                new Location(fileName, idx, token.getStartIndex(), token.getEndIndex()));
+                    token -> {
+                        var stringToken = line.substring(token.getStartIndex(), token.getEndIndex());
+                        if (stringToken.endsWith(":")) {
+                            // remove the colon
+                            addDefinition(stringToken.replace(":", ""),
+                                    new Location(fileName, idx, token.getStartIndex(), token.getEndIndex()));
                         } else if (stringToken.endsWith("=")) {
                             addDefinition(stringToken.split("=")[0].trim(),
-                                new Location(fileName, idx, token.getStartIndex(), token.getEndIndex()));
-                        }        
-                }
-            );
+                                    new Location(fileName, idx, token.getStartIndex(), token.getEndIndex()));
+                        }
+                    });
 
             // find structure
             {
@@ -79,7 +78,7 @@ public class SymbolService {
                     addDefinition(def,
                             new Location(fileName, idx, 0, line.length()));
                 }
-            }// find proc
+            } // find proc
             {
                 var split = line.split("(?i).*\\.proc");
                 if (split.length > 1) {
@@ -115,19 +114,25 @@ public class SymbolService {
                 }
             }
 
-// find functions. Fuunctions are a summersism
-{
-    var macro = line.split("(?i).*function");
-    if (macro.length > 1) {
+            // find functions. Fuunctions are a summersism
+            {
+                var macro = line.split("(?i).*function");
+                if (macro.length > 1) {
+                    Logger.getAnonymousLogger().info((line));
 
-        var namePlusRight = macro[1].trim();
-        var tok = grammar.tokenizeLine(namePlusRight).getTokens()[0];
-        var def = namePlusRight.subSequence(tok.getStartIndex(), tok.getEndIndex()).toString();
-        addDefinition(def,
-                new Location(fileName, idx, 0, line.length()));
-    }
-}
+                    var namePlusRight = macro[1].trim();
+                    if (!namePlusRight.isBlank()) {
+                        Logger.getAnonymousLogger().info(Arrays.deepToString(macro));
+                        var tok = grammar.tokenizeLine(namePlusRight).getTokens()[0];
+                        Logger.getAnonymousLogger().info(tok.toString());
+                        Logger.getAnonymousLogger().info(namePlusRight.toString());
+                        var def = namePlusRight.subSequence(tok.getStartIndex(), tok.getEndIndex()).toString();
 
+                        addDefinition(def,
+                                new Location(fileName, idx, 0, line.length()));
+                    }
+                }
+            }
         });
 
     }

@@ -5,28 +5,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
-import java.util.List;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-
-import com.google.gson.GsonBuilder;
 
 import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.TextDocumentIdentifier;
 import dev.secondsun.lsp.TextDocumentPositionParams;
-import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.registry.Registry;
-import dev.secondsun.tm4e4lsp.CC65LanguageServer;
-import dev.secondsun.tm4e4lsp.feature.GoToDefinitionLinkFeature;
-import dev.secondsun.tm4e4lsp.util.FileService;
-import dev.secondsun.tm4e4lsp.util.SymbolService;
-import dev.secondsun.tm4e4lsp.util.Location;
+import dev.secondsun.retrolsp.CC65LanguageServer;
+import dev.secondsun.retrolsp.feature.GoToDefinitionLinkFeature;
+import dev.secondsun.retro.util.FileService;
+import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retro.util.Location;
 /**
  * This is a suite of tests that test 
  *   1) symbol identification 
@@ -55,7 +50,7 @@ public class SymbolsTest {
 
 
         var lines = fileService.readLines(URI.create("./symbol.s"));
-        
+
         symbolService.extractDefinitions(SYMBOLS_URI, lines);
 
         var location = symbolService.getLocation("labelDef");

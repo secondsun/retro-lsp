@@ -4,7 +4,7 @@ package dev.secondsun;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 
-import dev.secondsun.tm4e4lsp.util.Util;
+import dev.secondsun.retro.util.Util;
 
 public class UtilTest {
     

@@ -1,4 +1,4 @@
-package dev.secondsun.tm4e4lsp.feature;
+package dev.secondsun.retrolsp.feature;
 
 import java.util.Arrays;
 import java.util.List;
@@ -12,9 +12,9 @@ import dev.secondsun.lsp.Location;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
+import dev.secondsun.retro.util.SymbolService;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.grammar.IToken;
-import dev.secondsun.tm4e4lsp.util.SymbolService;
 
 public class GoToDefinitionLinkFeature implements Feature<TextDocumentPositionParams, List<Location>>{
 

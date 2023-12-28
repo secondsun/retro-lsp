@@ -8,10 +8,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.util.Arrays;
 import java.util.Optional;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import dev.secondsun.lsp.Hover;
@@ -19,7 +17,7 @@ import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.TextDocumentIdentifier;
 import dev.secondsun.lsp.TextDocumentPositionParams;
-import dev.secondsun.tm4e4lsp.CC65LanguageServer;
+import dev.secondsun.retrolsp.CC65LanguageServer;
 
 
 public class HoverTest {

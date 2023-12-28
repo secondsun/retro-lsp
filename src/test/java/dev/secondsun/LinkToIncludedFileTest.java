@@ -4,20 +4,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import dev.secondsun.lsp.DocumentLinkParams;
 import dev.secondsun.lsp.TextDocumentIdentifier;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.registry.Registry;
-import dev.secondsun.tm4e4lsp.CC65LanguageServer;
-import dev.secondsun.tm4e4lsp.feature.DocumentLinkFeature;
-import dev.secondsun.tm4e4lsp.util.FileService;
+import dev.secondsun.retrolsp.CC65LanguageServer;
+import dev.secondsun.retrolsp.feature.DocumentLinkFeature;
+import dev.secondsun.retro.util.FileService;
 
 public class LinkToIncludedFileTest {
     

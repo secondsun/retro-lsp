@@ -1,4 +1,4 @@
-package dev.secondsun.tm4e4lsp.feature;
+package dev.secondsun.retrolsp.feature;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -16,7 +16,7 @@ import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.lsp.TextEdit;
-import dev.secondsun.tm4e4lsp.util.Util;
+import dev.secondsun.retro.util.Util;
 
 public class IncludeCompletionFeature implements CompletionFeature {
 

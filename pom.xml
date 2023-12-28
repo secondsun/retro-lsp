@@ -4,15 +4,15 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>dev.secondsun</groupId>
-  <artifactId>tm4e4lsp</artifactId>
+  <artifactId>retro-lsp</artifactId>
   <version>1.0</version>
 
-  <name>tm4e4lsp</name>
+  <name>retro-lsp</name>
   <url>https://github.com/secondsun/retro-lsp</url>
 
   <licenses>
       <license>
-          <name>GNU General Public License v2.1</name>
+          <name>GNU LESSER GENERAL PUBLIC LICENSE v3.0</name>
           <url>https://github.com/secondsun/retro-lsp/blob/prototype/LICENSE</url>
       </license>
   </licenses>
@@ -29,13 +29,13 @@
     <connection>scm:git:git://github.com/secondsun/retro-lsp.git</connection>
     <developerConnection>scm:git:ssh://github.com:secondsun/retro-lsp.git</developerConnection>
     <url>http://github.com/secondsun/retro-lsp/tree/prototype</url>
-    <tag>tm4e4lsp-1.0</tag>
+    <tag>retro-1.0</tag>
   </scm>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.source>20</maven.compiler.source>
-    <maven.compiler.target>20</maven.compiler.target>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
   </properties>
 
   <dependencies>
@@ -44,16 +44,6 @@
 			<artifactId>gson</artifactId>
 			<version>2.10</version>
 		</dependency>
-    <dependency>
-			<groupId>org.jruby.joni</groupId>
-			<artifactId>joni</artifactId>
-			<version>2.1.44</version>
-    </dependency>
-		<dependency>
-			<groupId>org.jruby.jcodings</groupId>
-			<artifactId>jcodings</artifactId>
-			<version>1.0.58</version>
-    </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-engine</artifactId>
@@ -67,16 +57,21 @@
 		</dependency>
     <dependency>
       <groupId>dev.secondsun</groupId>
-      <artifactId>org.eclipse.tm4e.core</artifactId>
-      <version>0.4.8</version>
+      <artifactId>retro-common</artifactId>
+      <version>1.0</version>
     </dependency>
+
+      <dependency>
+          <groupId>dev.secondsun</groupId>
+          <artifactId>org.eclipse.tm4e.core</artifactId>
+          <version>0.5.0</version>
+      </dependency>
 
     <dependency>
       <groupId>dev.secondsun</groupId>
       <artifactId>languageserver</artifactId>
       <version>0.8</version>
     </dependency>
-    
   </dependencies>
 
   <build>
@@ -105,7 +100,7 @@
             <manifest>
               <addClasspath>true</addClasspath>
               <classpathPrefix>dependency/</classpathPrefix>
-              <mainClass>dev.secondsun.tm4e4lsp.Main</mainClass>
+              <mainClass>dev.secondsun.retrolsp.Main</mainClass>
             </manifest>
           </archive>
         </configuration>
@@ -185,7 +180,7 @@
           <artifactId>maven-deploy-plugin</artifactId>
           <version>3.0.0</version>
         </plugin>
-        <!-- site lifecycle, see https://maven.apache.org/ref/current/maven-core/lifecycles.html#site_Lifecycle -->
+            <!-- site lifecycle, see https://maven.apache.org/ref/current/maven-core/lifecycles.html#site_Lifecycle -->
         <plugin>
           <artifactId>maven-site-plugin</artifactId>
           <version>4.0.0-M4</version>
@@ -257,7 +252,7 @@
               <arguments>
                   <argument>-classpath</argument>
                   <classpath/>
-                  <argument>dev.secondsun.tm4e4lsp.Main</argument>
+                  <argument>dev.secondsun.retrolsp.Main</argument>
               </arguments>
           </configuration>
       </execution>

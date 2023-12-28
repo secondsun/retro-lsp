@@ -1,4 +1,4 @@
-package dev.secondsun.tm4e4lsp;
+package dev.secondsun.retrolsp;
 import java.util.logging.Logger;
 import dev.secondsun.lsp.LSP;
 

@@ -15,7 +15,7 @@ import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentIdentifier;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.lsp.TextEdit;
-import dev.secondsun.tm4e4lsp.feature.DirectiveCompletionFeature;
+import dev.secondsun.retrolsp.feature.DirectiveCompletionFeature;
 
 public class CompletionTest {
     

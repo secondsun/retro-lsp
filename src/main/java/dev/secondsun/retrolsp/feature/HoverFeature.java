@@ -1,4 +1,4 @@
-package dev.secondsun.tm4e4lsp.feature;
+package dev.secondsun.retrolsp.feature;
 
 import java.util.Arrays;
 import java.util.List;
@@ -15,7 +15,7 @@ import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.grammar.IToken;
 import dev.secondsun.tm4e.core.grammar.ITokenizeLineResult;
-import dev.secondsun.tm4e4lsp.util.Util;
+import dev.secondsun.retro.util.Util;
 
 public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> {
 

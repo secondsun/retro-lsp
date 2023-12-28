@@ -5,5 +5,6 @@ open module dev.secondsun.tm4e4lsp {
     requires xml.apis.ext;
 
     requires dev.secondsun.lsp;
-    requires dev.secondsun.tm4e.core;
+    requires dev.secondsun.retro.util;
+    requires     dev.secondsun.tm4e.core;
   }

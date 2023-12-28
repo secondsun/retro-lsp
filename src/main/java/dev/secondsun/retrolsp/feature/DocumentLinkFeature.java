@@ -1,4 +1,4 @@
-package dev.secondsun.tm4e4lsp.feature;
+package dev.secondsun.retrolsp.feature;
 
 import java.io.File;
 import java.io.IOException;
@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import com.google.gson.JsonObject;
@@ -16,15 +15,16 @@ import dev.secondsun.lsp.DocumentLink;
 import dev.secondsun.lsp.DocumentLinkParams;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
+import dev.secondsun.retro.util.FileService;
+import dev.secondsun.retro.util.Util;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
-import dev.secondsun.tm4e4lsp.util.FileService;
-import dev.secondsun.tm4e4lsp.util.Util;
+
 
 public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<DocumentLink>> {
     private static final Logger LOG = Logger.getLogger(DocumentLinkFeature.class.getName());
 
     private IGrammar grammar;
-    private final  FileService fs;
+    private final FileService fs;
     public DocumentLinkFeature(IGrammar grammar, FileService fileService) {
         this.grammar = grammar;
         this.fs = fileService;
@@ -81,8 +81,7 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
         return Optional.of(links);
     }
     private URI getCurrentDirectory(URI uri) throws IOException {
-        
-        
+
         if (uri.isAbsolute()) {
             var file = new File(uri.getRawSchemeSpecificPart());
             if (!file.isDirectory()) {

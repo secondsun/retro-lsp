@@ -1,18 +1,12 @@
-package dev.secondsun.tm4e4lsp;
+package dev.secondsun.retrolsp;
 
-import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Logger;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import dev.secondsun.lsp.CompletionList;
@@ -25,18 +19,19 @@ import dev.secondsun.lsp.InitializeResult;
 import dev.secondsun.lsp.LanguageServer;
 import dev.secondsun.lsp.Location;
 import dev.secondsun.lsp.TextDocumentPositionParams;
+import dev.secondsun.retro.util.FileService;
+import dev.secondsun.retro.util.ProjectService;
+import dev.secondsun.retro.util.SymbolService;
 import dev.secondsun.tm4e.core.grammar.IGrammar;
 import dev.secondsun.tm4e.core.registry.Registry;
-import dev.secondsun.tm4e4lsp.feature.CompletionFeature;
-import dev.secondsun.tm4e4lsp.feature.DirectiveCompletionFeature;
-import dev.secondsun.tm4e4lsp.feature.DocumentLinkFeature;
-import dev.secondsun.tm4e4lsp.feature.Feature;
-import dev.secondsun.tm4e4lsp.feature.GoToDefinitionLinkFeature;
-import dev.secondsun.tm4e4lsp.feature.HoverFeature;
-import dev.secondsun.tm4e4lsp.feature.IncludeCompletionFeature;
-import dev.secondsun.tm4e4lsp.util.FileService;
-import dev.secondsun.tm4e4lsp.util.ProjectService;
-import dev.secondsun.tm4e4lsp.util.SymbolService;
+import dev.secondsun.retrolsp.feature.CompletionFeature;
+import dev.secondsun.retrolsp.feature.DirectiveCompletionFeature;
+import dev.secondsun.retrolsp.feature.DocumentLinkFeature;
+import dev.secondsun.retrolsp.feature.Feature;
+import dev.secondsun.retrolsp.feature.GoToDefinitionLinkFeature;
+import dev.secondsun.retrolsp.feature.HoverFeature;
+import dev.secondsun.retrolsp.feature.IncludeCompletionFeature;
+
 
 public class CC65LanguageServer extends LanguageServer {
 
@@ -58,7 +53,6 @@ public class CC65LanguageServer extends LanguageServer {
     private ProjectService projectService;
 
     private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
-    public static final Gson GSON = new Gson();
 
     public CC65LanguageServer() {
 

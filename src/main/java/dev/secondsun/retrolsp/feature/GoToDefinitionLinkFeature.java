@@ -13,26 +13,26 @@ import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.retro.util.SymbolService;
-import dev.secondsun.tm4e.core.grammar.IGrammar;
-import dev.secondsun.tm4e.core.grammar.IToken;
+import dev.secondsun.retro.util.Token;
+import dev.secondsun.retro.util.TokenType;
+import dev.secondsun.retro.util.vo.TokenizedFile;
+
 
 public class GoToDefinitionLinkFeature implements Feature<TextDocumentPositionParams, List<Location>>{
 
-    private IGrammar grammar;
     private SymbolService symbolService;
-    public GoToDefinitionLinkFeature(IGrammar grammar, SymbolService symbolService) {
-        this.grammar = grammar;
+    public GoToDefinitionLinkFeature( SymbolService symbolService) {
         this.symbolService = symbolService;
     }
 
    
-    public Optional<List<Location>> handle(TextDocumentPositionParams params, List<String> list) {
-        var line = list.get(params.position.line);
-        var tokens = grammar.tokenizeLine(line);
+    public Optional<List<Location>> handle(TextDocumentPositionParams params, TokenizedFile list) {
+        var line = list.getLineText(params.position.line);
+        var tokens = list.getLine(params.position.line);
         Logger.getAnonymousLogger().info(new Gson().toJson(tokens));
-        if (tokens != null && tokens.getTokens() != null && tokens.getTokens().length > 0) {
+        if (tokens != null && tokens.tokens() != null && tokens.tokens().size() > 0) {
             var column = params.position.character;
-            Optional<IToken> token = Arrays.stream(tokens.getTokens()).filter(it-> it.getStartIndex() <= column && it.getEndIndex() >= column ).filter(it ->it.getScopes().contains("variable.other.readwrite.assembly")).findFirst();
+            Optional<Token> token = tokens.tokens().stream().filter(it-> it.getStartIndex() <= column && it.getEndIndex() >= column ).filter(it ->it.getType() == TokenType.TOK_IDENT).findFirst();
             
             if (token.isPresent()) {
                 var label = line.subSequence(token.get().getStartIndex(), token.get().getEndIndex());

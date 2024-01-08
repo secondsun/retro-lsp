@@ -12,33 +12,27 @@ import dev.secondsun.lsp.MarkedString;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
-import dev.secondsun.tm4e.core.grammar.IGrammar;
-import dev.secondsun.tm4e.core.grammar.IToken;
-import dev.secondsun.tm4e.core.grammar.ITokenizeLineResult;
+import dev.secondsun.retro.util.Token;
 import dev.secondsun.retro.util.Util;
+import dev.secondsun.retro.util.vo.TokenizedFile;
 
 public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> {
 
-    private IGrammar grammar;
-
-    public HoverFeature(IGrammar grammar) {
-        this.grammar = grammar;
-	}
 
 	@Override
     public void initialize(JsonObject initializeData) {
         initializeData.add("hoverProvider", new JsonPrimitive(true));
     }
 
-	public Optional<Hover> handle(TextDocumentPositionParams params, List<String> fileContent) {
-        String line = fileContent.get(params.position.line);
-        ITokenizeLineResult lineTokens = grammar.tokenizeLine(line);
+	public Optional<Hover> handle(TextDocumentPositionParams params, TokenizedFile fileContent) {
+        String line = fileContent.getLineText(params.position.line);
+        var lineTokens = fileContent.getLineTokens(params.position.line);
 
-        Optional<IToken> maybeToken = Util.getTokenAt(lineTokens, params.position.character);
+        Optional<Token> maybeToken = Util.getTokenAt(lineTokens, params.position.character);
 
         if (maybeToken.isPresent()) {
             var token = maybeToken.get();
-            String tokenText =  Util.getTokenText(line, token);
+            String tokenText =  token.text();
             var hover = new Hover();
             hover.range = new Range(new Position(params.position.line, token.getStartIndex()),
                     new Position(params.position.line, token.getEndIndex()));
@@ -48,7 +42,7 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
             }
             return Optional.of(hover);
         } else {
-            return Optional.empty();
+            return Optional.of(new Hover());
         }
 	}
 

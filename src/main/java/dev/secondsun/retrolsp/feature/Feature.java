@@ -1,9 +1,10 @@
 package dev.secondsun.retrolsp.feature;
 
-import java.util.List;
 import java.util.Optional;
 
 import com.google.gson.JsonObject;
+
+import dev.secondsun.retro.util.vo.TokenizedFile;
 
 
 public interface Feature<PARAMS, RESULT> {
@@ -23,17 +24,6 @@ public interface Feature<PARAMS, RESULT> {
      * @param fileContent line separated file content
      * @return RESULT or empty optional
      */
-    Optional<RESULT> handle(PARAMS params, List<String> fileContent);
+    Optional<RESULT> handle(PARAMS params, TokenizedFile fileContent);
 
 }
-
-/*
-public interface Feature<PARAMS, OUTPUT> {
-
-    void initializeFeature(URI workspaceRoot, JsonObject initializeData);
-
-    Visitor getFeatureVisitor();
-
-    OUTPUT handle(Project project, PARAMS params);
-}
- */

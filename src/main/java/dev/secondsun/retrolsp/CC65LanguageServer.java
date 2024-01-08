@@ -22,8 +22,6 @@ import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.retro.util.FileService;
 import dev.secondsun.retro.util.ProjectService;
 import dev.secondsun.retro.util.SymbolService;
-import dev.secondsun.tm4e.core.grammar.IGrammar;
-import dev.secondsun.tm4e.core.registry.Registry;
 import dev.secondsun.retrolsp.feature.CompletionFeature;
 import dev.secondsun.retrolsp.feature.DirectiveCompletionFeature;
 import dev.secondsun.retrolsp.feature.DocumentLinkFeature;
@@ -36,8 +34,7 @@ import dev.secondsun.retrolsp.feature.IncludeCompletionFeature;
 public class CC65LanguageServer extends LanguageServer {
 
     private final FileService fileService;
-    private Registry registry;
-    private IGrammar grammar;
+    
     // TODO Actually make use of language client
     // private final LanguageClient client;
     private URI workspaceRoot;
@@ -60,16 +57,11 @@ public class CC65LanguageServer extends LanguageServer {
 
             this.fileService = new FileService();
 
-            this.registry = new Registry();
-
-            this.grammar = registry.loadGrammarFromPathSync("snes.json",
-                    CC65LanguageServer.class.getClassLoader().getResourceAsStream("snes.json"));
-
-            this.symbolService = new SymbolService(registry, grammar);
+            this.symbolService = new SymbolService();
             this.projectService = new ProjectService(fileService, symbolService);
-            this.hoverFeature = new HoverFeature(grammar);
-            this.documentLinkFeature = new DocumentLinkFeature(grammar, this.fileService);
-            this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature(grammar, this.symbolService);
+            this.hoverFeature = new HoverFeature();
+            this.documentLinkFeature = new DocumentLinkFeature( this.fileService);
+            this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature( this.symbolService);
             this.includeCompletionFeature = new IncludeCompletionFeature();
             this.commandCompletionFeature = new DirectiveCompletionFeature();
 
@@ -161,7 +153,7 @@ public class CC65LanguageServer extends LanguageServer {
     public List<DocumentLink> documentLink(DocumentLinkParams params) {
         
         return documentLinkFeature.handle(params, projectService.getFileContents(params.textDocument.uri))
-                .orElse(new ArrayList<>());
+                .orElse(List.of());
     }
 
     @Override

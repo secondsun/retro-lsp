@@ -15,6 +15,7 @@ import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.lsp.TextEdit;
 import dev.secondsun.retro.util.Util;
+import dev.secondsun.retro.util.vo.TokenizedFile;
 
 public class DirectiveCompletionFeature implements CompletionFeature {
 
@@ -132,9 +133,9 @@ public class DirectiveCompletionFeature implements CompletionFeature {
     }
 
     @Override
-    public Optional<CompletionList> handle(TextDocumentPositionParams params, List<String> fileContent) {
+    public Optional<CompletionList> handle(TextDocumentPositionParams params, TokenizedFile fileContent) {
         
-        var line = fileContent.get(params.position.line);
+        var line = fileContent.getLineText(params.position.line);
         
         var leftOfCursor = line.substring(0,params.position.character).trim();
         if (leftOfCursor.startsWith(".")) {
@@ -165,8 +166,8 @@ public class DirectiveCompletionFeature implements CompletionFeature {
     }
 
     @Override
-    public boolean canComplete(TextDocumentPositionParams params, List<String> fileContent) {
-        var line = fileContent.get(params.position.line).trim();
+    public boolean canComplete(TextDocumentPositionParams params, TokenizedFile fileContent) {
+        var line = fileContent.getLineText(params.position.line).trim();
         var leftOfCursor = line.substring(0,params.position.character).trim();
         return !CONTROL_COMMANDS.stream().filter(string -> string.startsWith(leftOfCursor.toUpperCase())).findAny().isEmpty();
     }

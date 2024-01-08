@@ -57,7 +57,7 @@ public class HoverTest {
 
         server.initialize(params);
         TextDocumentIdentifier textDocument = new TextDocumentIdentifier(getTestFile("test.sgs"));
-        Position position = new Position(11, 1);//Whitespace
+        Position position = new Position(11, 0);//Whitespace
         Optional<Hover> hoverResult = server.hover(new TextDocumentPositionParams(textDocument, position));
         assertNotNull(hoverResult);
         assertTrue(hoverResult.get().contents == null);

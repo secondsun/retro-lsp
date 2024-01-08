@@ -17,16 +17,14 @@ import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.retro.util.FileService;
 import dev.secondsun.retro.util.Util;
-import dev.secondsun.tm4e.core.grammar.IGrammar;
+import dev.secondsun.retro.util.vo.TokenizedFile;
 
 
 public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<DocumentLink>> {
     private static final Logger LOG = Logger.getLogger(DocumentLinkFeature.class.getName());
 
-    private IGrammar grammar;
     private final FileService fs;
-    public DocumentLinkFeature(IGrammar grammar, FileService fileService) {
-        this.grammar = grammar;
+    public DocumentLinkFeature(FileService fileService) {
         this.fs = fileService;
 	}
     @Override
@@ -39,7 +37,7 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
     }
 
     @Override
-    public Optional<List<DocumentLink>> handle(DocumentLinkParams params, List<String>  fileContent) {
+    public Optional<List<DocumentLink>> handle(DocumentLinkParams params, TokenizedFile fileContent) {
         
         List<DocumentLink> links = new ArrayList<>();
         URI currentDir;
@@ -48,9 +46,9 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        IntStream.range(0, fileContent.size()).forEach(idx -> {
+        IntStream.range(0, fileContent.textLines()).forEach(idx -> {
 
-            var line = fileContent.get(idx);
+            var line = fileContent.getLineText(idx);
             if (Util.isIncludeDirective(line)) {
                 try {
                     //Ok we're parsing out the filename from the line.
@@ -59,7 +57,7 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
                     // bad about being messy here though using the grammar would be smarter
 
                     //We're splitting comments, then splitting the string
-                    var fileName = line.split(";")[0].split("\"")[1];
+                    var fileName = fileContent.getLineTokens(idx).get(1).text().replace("\"","");
                     
                     //Find knows about relative files and resolves to files on the hard disk.
                     var files = fs.find(URI.create(fileName), currentDir);

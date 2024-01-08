@@ -17,6 +17,7 @@ import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.lsp.TextEdit;
 import dev.secondsun.retro.util.Util;
+import dev.secondsun.retro.util.vo.TokenizedFile;
 
 public class IncludeCompletionFeature implements CompletionFeature {
 
@@ -33,15 +34,15 @@ public class IncludeCompletionFeature implements CompletionFeature {
     }
 
     @Override
-    public Optional<CompletionList> handle(TextDocumentPositionParams params, List<String> fileContent) {
+    public Optional<CompletionList> handle(TextDocumentPositionParams params, TokenizedFile fileContent) {
 
-        if (fileContent == null || fileContent.size() < params.position.line) {
+        if (fileContent == null || fileContent.textLines() < params.position.line) {
             return Optional.empty();
         }
         
         CompletionList list = new CompletionList();
         list.items = new ArrayList<>();
-        var line = fileContent.get(params.position.line);
+        var line = fileContent.getLineText(params.position.line);
         var stringLeftOfCursor = line.substring(0, params.position.character);// I think that you can't replace the string before the cursor
         
         var filePrefix = getPrefix(stringLeftOfCursor);
@@ -96,8 +97,8 @@ public class IncludeCompletionFeature implements CompletionFeature {
     }
 
     @Override
-    public boolean canComplete(TextDocumentPositionParams params, List<String> fileContent) {
-        var line = fileContent.get(params.position.line).trim();
+    public boolean canComplete(TextDocumentPositionParams params, TokenizedFile fileContent) {
+        var line = fileContent.getLineText(params.position.line).trim();
         var leftOfCursor = line.substring(0,params.position.character).trim();
         return leftOfCursor.toUpperCase().startsWith(".INCLUDE");
     }

@@ -50,22 +50,12 @@
       <version>5.9.2</version>
       <scope>test</scope>
   </dependency>
-		<dependency>
-			<groupId>dev.secondsun</groupId>
-			<artifactId>w3c0sac</artifactId>
-			<version>1.0.0</version>
-		</dependency>
+		
     <dependency>
       <groupId>dev.secondsun</groupId>
       <artifactId>retro-common</artifactId>
-      <version>1.0</version>
+      <version>1.1.1</version>
     </dependency>
-
-      <dependency>
-          <groupId>dev.secondsun</groupId>
-          <artifactId>org.eclipse.tm4e.core</artifactId>
-          <version>0.5.0</version>
-      </dependency>
 
     <dependency>
       <groupId>dev.secondsun</groupId>
@@ -87,7 +77,7 @@
             <phase>generate-resources</phase>
             <configuration>
               <includeScope>runtime</includeScope>
-              <excludeTransitive>true</excludeTransitive>
+              <excludeTransitive>false</excludeTransitive>
             </configuration>
           </execution>
         </executions>

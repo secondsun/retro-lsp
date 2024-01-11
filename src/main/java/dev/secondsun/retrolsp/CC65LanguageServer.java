@@ -151,7 +151,7 @@ public class CC65LanguageServer extends LanguageServer {
 
     @Override
     public List<DocumentLink> documentLink(DocumentLinkParams params) {
-        
+        LOG.info("documentLink :" + params.textDocument.uri.toString());
         return documentLinkFeature.handle(params, projectService.getFileContents(params.textDocument.uri))
                 .orElse(List.of());
     }

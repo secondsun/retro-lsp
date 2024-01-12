@@ -40,20 +40,16 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
 
     @Override
     public Optional<List<DocumentLink>> handle(DocumentLinkParams params, TokenizedFile fileContent) {
-        Logger.getAnonymousLogger().info("DocumentLinkFeature.handle:" + fileContent.uri);
-        Logger.getAnonymousLogger().info("DocumentLinkFeature.handle:" + fileContent.textLines());
         List<DocumentLink> links = new ArrayList<>();
         URI currentDir;
         try {
             currentDir = getCurrentDirectory(params.textDocument.uri);
-            Logger.getAnonymousLogger().info("Getting file contents for " + params.textDocument.uri.toString() + " in dir" + currentDir.toString());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
         IntStream.range(0, fileContent.textLines()).forEach(idx -> {
 
             var line = fileContent.getLineText(idx);
-            Logger.getAnonymousLogger().info("line " + idx + ":" + line);
             if (Util.isIncludeDirective(line)) {
                 try {
                     //Ok we're parsing out the filename from the line.
@@ -63,11 +59,8 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
 
                     //We're splitting comments, then splitting the string
                     var fileName = fileContent.getLineTokens(idx).get(1).text().replace("\"","");
-                    Logger.getAnonymousLogger().info(".include filename " + fileName);
-                    Logger.getAnonymousLogger().info("currentDir " + currentDir);
                     //Find knows about relative files and resolves to files on the hard disk.
                     var files = fs.find(URI.create(fileName), currentDir);
-                    Logger.getAnonymousLogger().info("files " + files.stream().map(Object::toString).collect(Collectors.joining(",")));
                     for (URI file : files) {
 
                         var link = new DocumentLink();
@@ -92,7 +85,6 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
         // Logger.getAnonymousLogger().info("getCurrentDirectory.relativize:" + uri.relativize(URI.create("../")).toString());
         // Logger.getAnonymousLogger().info("getCurrentDirectory.resolve:" + uri.resolve(URI.create("../")).toString());
         try {
-        Logger.getAnonymousLogger().info("getCurrentDirectory.file:" +  new File(uri).getParentFile().toURI());
         return new File(uri).getParentFile().toURI();
         } catch (Exception ignore) {}
         if (uri.isAbsolute()) {

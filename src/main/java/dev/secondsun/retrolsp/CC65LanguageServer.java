@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import dev.secondsun.lsp.CompletionList;
@@ -151,14 +152,14 @@ public class CC65LanguageServer extends LanguageServer {
 
     @Override
     public List<DocumentLink> documentLink(DocumentLinkParams params) {
-        LOG.info("documentLink :" + params.textDocument.uri.toString());
+        
         return documentLinkFeature.handle(params, projectService.getFileContents(params.textDocument.uri))
                 .orElse(List.of());
     }
 
     @Override
     public Optional<List<Location>> gotoDefinition(TextDocumentPositionParams params) {
-        
+        LOG.info(new Gson().toJson(params));
         return gotoDefinitionLinkFeature.handle(params, projectService.getFileContents(params.textDocument.uri));
     }
 

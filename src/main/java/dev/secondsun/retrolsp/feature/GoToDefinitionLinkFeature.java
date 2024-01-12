@@ -20,6 +20,8 @@ import dev.secondsun.retro.util.vo.TokenizedFile;
 
 public class GoToDefinitionLinkFeature implements Feature<TextDocumentPositionParams, List<Location>>{
 
+    private static Logger LOG = Logger.getLogger(GoToDefinitionLinkFeature.class.getName());
+
     private SymbolService symbolService;
     public GoToDefinitionLinkFeature( SymbolService symbolService) {
         this.symbolService = symbolService;
@@ -29,19 +31,22 @@ public class GoToDefinitionLinkFeature implements Feature<TextDocumentPositionPa
     public Optional<List<Location>> handle(TextDocumentPositionParams params, TokenizedFile list) {
         var line = list.getLineText(params.position.line);
         var tokens = list.getLine(params.position.line);
-        Logger.getAnonymousLogger().info(new Gson().toJson(tokens));
+        LOG.info("Handle GoToDefinition");
+        LOG.info(new Gson().toJson(line));
+        LOG.info(new Gson().toJson(tokens));
         if (tokens != null && tokens.tokens() != null && tokens.tokens().size() > 0) {
             var column = params.position.character;
+            LOG.info("column" + column);
             Optional<Token> token = tokens.tokens().stream().filter(it-> it.getStartIndex() <= column && it.getEndIndex() >= column ).filter(it ->it.getType() == TokenType.TOK_IDENT).findFirst();
-            
+            LOG.info("token.ispresent:" + new Gson().toJson(token.isPresent()));
             if (token.isPresent()) {
                 var label = line.subSequence(token.get().getStartIndex(), token.get().getEndIndex());
-                var location = symbolService.getLocation(label.toString());
-                Logger.getAnonymousLogger().info("gotoDefinition");
-                Logger.getAnonymousLogger().info(label.toString());
+                LOG.info("token is Present label:" + new Gson().toJson(label));
+                var location = symbolService.getLocation(label.toString().trim());
+                LOG.info("token is Present location:" +  new Gson().toJson(location));
                 if (location != null) {
-                    Logger.getAnonymousLogger().info(location.toString());
                     var toReturn = new Location(location.filename(), new Range(new Position(location.line(), location.startIndex()), new Position(location.line(), location.endIndex())));
+                    LOG.info("toReturn:" + new Gson().toJson(toReturn));
                     return Optional.of(List.of(toReturn));
                 }
             }

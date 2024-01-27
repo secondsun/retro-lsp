@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -34,15 +35,16 @@ public class GoToDefinitionLinkFeature implements Feature<TextDocumentPositionPa
         LOG.info("Handle GoToDefinition");
         LOG.info(new Gson().toJson(line));
         LOG.info(new Gson().toJson(tokens));
-        if (tokens != null && tokens.tokens() != null && tokens.tokens().size() > 0) {
+        if (tokens != null && tokens.tokens() != null && !tokens.tokens().isEmpty()) {
             var column = params.position.character;
             LOG.info("column" + column);
             Optional<Token> token = tokens.tokens().stream().filter(it-> it.getStartIndex() <= column && it.getEndIndex() >= column ).filter(it ->it.getType() == TokenType.TOK_IDENT).findFirst();
             LOG.info("token.ispresent:" + new Gson().toJson(token.isPresent()));
             if (token.isPresent()) {
                 var label = line.subSequence(token.get().getStartIndex(), token.get().getEndIndex());
-                LOG.info("token is Present label:" + new Gson().toJson(label));
+                LOG.info("token is Present label:" + (label.toString().trim()));
                 var location = symbolService.getLocation(label.toString().trim());
+                LOG.info("symbolService symbols:" + String.join(",\n", symbolService.definitions.keySet()));
                 LOG.info("token is Present location:" +  new Gson().toJson(location));
                 if (location != null) {
                     var toReturn = new Location(location.filename(), new Range(new Position(location.line(), location.startIndex()), new Position(location.line(), location.endIndex())));

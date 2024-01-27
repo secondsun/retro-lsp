@@ -144,8 +144,6 @@ public class CC65LanguageServer extends LanguageServer {
 
     @Override
     public Optional<Hover> hover(TextDocumentPositionParams params) {
-        
-
         return hoverFeature.handle(params, projectService.getFileContents(params.textDocument.uri));
 
     }

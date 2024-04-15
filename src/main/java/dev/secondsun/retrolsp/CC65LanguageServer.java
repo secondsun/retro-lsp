@@ -30,7 +30,7 @@ import dev.secondsun.retrolsp.feature.Feature;
 import dev.secondsun.retrolsp.feature.GoToDefinitionLinkFeature;
 import dev.secondsun.retrolsp.feature.HoverFeature;
 import dev.secondsun.retrolsp.feature.IncludeCompletionFeature;
-
+import dev.secondsun.sfxoptimizer.graphnode.*;
 
 public class CC65LanguageServer extends LanguageServer {
 
@@ -49,6 +49,8 @@ public class CC65LanguageServer extends LanguageServer {
     private Path libSFXRoot;
     private SymbolService symbolService;
     private ProjectService projectService;
+
+    private CodeGraph graph;
 
     private static final Logger LOG = Logger.getLogger(CC65LanguageServer.class.getName());
 

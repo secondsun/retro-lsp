@@ -46,6 +46,21 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
         }
 	}
 
+
+    private MarkedString lookupHover(Token token) {
+
+
+
+        return switch (token.text().toUpperCase()) {
+            case "NOP"->new MarkedString("No operation");
+            case "R0","R1","R2","R3","R4","R5","R6","R7","R8","R9","R10","R11","R12","R13","R14","R15"->registers();
+            case "SFR" -> statusFlagRegister();
+            case "BRAMR", "PBR","ROMBR", "CFGR","SCBR","CLSR","SCMR","VCR","RAMBR","CBR"  -> controlRegisters();
+            default -> null;
+        };
+
+
+    }
     
     private MarkedString lookupHover(String tokenText) {
         

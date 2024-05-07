@@ -62,7 +62,7 @@ public class CC65LanguageServer extends LanguageServer {
 
             this.symbolService = new SymbolService();
             this.projectService = new ProjectService(fileService, symbolService);
-            this.hoverFeature = new HoverFeature();
+            this.hoverFeature = new HoverFeature(fileService, symbolService);
             this.documentLinkFeature = new DocumentLinkFeature( this.fileService);
             this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature( this.symbolService);
             this.includeCompletionFeature = new IncludeCompletionFeature();

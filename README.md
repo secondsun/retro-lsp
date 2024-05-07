@@ -52,7 +52,7 @@ In general, `CA65LanguageServer.java` initializes features and delegates to comm
 ### JLink
 The 'scripts' directory includes simple linking scripts for building jlink launchers for mac, linux, and windows.
 
-### GrallVM Navive image
+### GrallVM Native image
 GrallVM support is in progress. Recent features broke the configuration and I haven't fixed it.
 
 ## Thanks and Contributions

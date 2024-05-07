@@ -6,4 +6,4 @@ open module dev.secondsun.tm4e4lsp {
     requires dev.secondsun.lsp;
     requires dev.secondsun.retro.util;
     requires dev.secondsun.sfxoptimizer;
-  }
+}

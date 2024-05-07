@@ -1,8 +1,10 @@
 package dev.secondsun.retrolsp.feature;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.io.IOException;
+import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -12,14 +14,29 @@ import dev.secondsun.lsp.MarkedString;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
-import dev.secondsun.retro.util.Token;
-import dev.secondsun.retro.util.Util;
+import dev.secondsun.retro.util.*;
 import dev.secondsun.retro.util.vo.TokenizedFile;
+import dev.secondsun.sfxoptimizer.AllocationResult;
+import dev.secondsun.sfxoptimizer.Constants;
+import dev.secondsun.sfxoptimizer.IntervalKey;
+import dev.secondsun.sfxoptimizer.graphbuilder.CA65Grapher;
+
+import static dev.secondsun.retro.util.instruction.GSUInstruction.isInstruction;
+import static dev.secondsun.retro.util.instruction.GSUInstruction.mark;
 
 public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> {
 
+    private final FileService fileService;
+    private final SymbolService symbolService;
+    private final CA65Grapher grapher;
 
-	@Override
+    public HoverFeature(FileService fileService, SymbolService symbolService) {
+        this.fileService = fileService;
+        this.symbolService = symbolService;
+        this.grapher = new CA65Grapher(symbolService, fileService );
+    }
+
+    @Override
     public void initialize(JsonObject initializeData) {
         initializeData.add("hoverProvider", new JsonPrimitive(true));
     }
@@ -36,14 +53,48 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
             var hover = new Hover();
             hover.range = new Range(new Position(params.position.line, token.getStartIndex()),
                     new Position(params.position.line, token.getEndIndex()));
-            var result = lookupHover(tokenText);
-            if (result != null) {
-                hover.contents = Arrays.asList(result);
+
+            if (isInstruction(token)) {
+                mark(token);
+                var result = lookupHover(tokenText);
+                if (result != null) {
+                    hover.contents = Arrays.asList(result);
+                }
+                return Optional.of(hover);
+            } else  {
+                var symbol = symbolService.getLocation(tokenText);
+                 if (symbol != null) {
+                    try {
+                        var graph = grapher.graph(fileService.readLines(symbol.filename()), symbol.line());
+
+                        var intervals = Arrays.stream(Constants.Register.values()).map( register ->
+                                graph.getStartNode().intervals(new IntervalKey.RegisterKey(register))
+                        ).filter(Objects::nonNull).toList();
+
+                        var string = new StringBuilder( " Uses : ");
+
+                                if (intervals.isEmpty() ) {
+                                    string.append(" NONE");
+                                } else {
+                                    intervals.forEach( interval -> {
+                                        string.append(String.format(" %s, ", interval.getKey().toString()));
+                                    });
+                                }
+
+
+                        return Optional.of(new Hover(List.of(new MarkedString(string.toString()))));
+                    } catch (IOException e) {
+                        Logger.getAnonymousLogger().log(Level.SEVERE, e.getMessage(),e);
+                        return Optional.of(new Hover(new ArrayList<>()));
+                    }
+                }
             }
-            return Optional.of(hover);
+
+
         } else {
-            return Optional.of(new Hover());
+            return Optional.of(new Hover(new ArrayList<>()));
         }
+        return Optional.of(new Hover(new ArrayList<>()));
 	}
 
 

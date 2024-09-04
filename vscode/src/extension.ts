@@ -43,10 +43,10 @@ export function activate(context: ExtensionContext) {
     // Start the child java process
     let serverOptions: ServerOptions = {
             run : { command: launcher, transport: TransportKind.stdio,
-                    options: { cwd: context.extensionPath,  }
+                    options: { cwd: context.extensionPath, shell:true }
             },
             debug : { command: launcher, transport: TransportKind.stdio,
-                options: { cwd: context.extensionPath }
+                options: { cwd: context.extensionPath, shell:true }
         }
     }
     

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="cdf625a2-de81-4673-a206-e9b797430fec" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/link_linux.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/link_linux.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/link_mac.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/link_mac.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/dev/secondsun/retrolsp/feature/HoverFeature.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/dev/secondsun/retrolsp/feature/HoverFeature.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/module-info.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/module-info.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/test/java/dev/secondsun/HoverTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/test/java/dev/secondsun/HoverTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/vscode/src/extension.ts" beforeDir="false" afterPath="$PROJECT_DIR$/vscode/src/extension.ts" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="96" />
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.0" />
+      <entry key="MS500" value="1.0" />
+      <entry key="S2" value="1.0000000000176643" />
+      <entry key="S5" value="1.0004943810632112" />
+      <entry key="S10" value="1.157988307521743" />
+      <entry key="S30" value="8.506074933110416" />
+      <entry key="S60" value="20.81594106110783" />
+      <entry key="M2" value="35.8402935605089" />
+      <entry key="M5" value="76.6544685721251" />
+      <entry key="M10" value="130.80579683458" />
+      <entry key="M15" value="164.3559747097408" />
+      <entry key="M30" value="212.2756180751991" />
+      <entry key="H1" value="243.80253006158767" />
+      <entry key="H2" value="261.9748348047688" />
+      <entry key="H4" value="271.7430085456898" />
+      <entry key="D1" value="280.2554065625814" />
+      <entry key="W1" value="281.74989747220997" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="2.615630963498271E-116" />
+      <entry key="S5" value="5.8483127327127E-47" />
+      <entry key="S10" value="7.647542017046374E-24" />
+      <entry key="S30" value="2.0189222364507028E-8" />
+      <entry key="S60" value="1.624414441886379E-4" />
+      <entry key="M2" value="0.016546261610673286" />
+      <entry key="M5" value="0.28677352901468495" />
+      <entry key="M10" value="0.7541290222927145" />
+      <entry key="M15" value="1.0428670789951897" />
+      <entry key="M30" value="1.4435218019547398" />
+      <entry key="H1" value="1.6989284790130732" />
+      <entry key="H2" value="1.8432729488129285" />
+      <entry key="H4" value="1.9200237391238653" />
+      <entry key="D1" value="1.9864408986441409" />
+      <entry key="W1" value="1.9980572832913557" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="0.5703818579342118" />
+      <entry key="MS500" value="0.893785162356787" />
+      <entry key="S2" value="0.9723179093203359" />
+      <entry key="S5" value="0.9893280490036126" />
+      <entry key="S10" value="1.152363645159136" />
+      <entry key="S30" value="8.503786259042627" />
+      <entry key="S60" value="20.81460552530616" />
+      <entry key="M2" value="35.85550764130324" />
+      <entry key="M5" value="76.93762261623662" />
+      <entry key="M10" value="131.55525440912461" />
+      <entry key="M15" value="165.3944990819033" />
+      <entry key="M30" value="213.71609373439242" />
+      <entry key="H1" value="245.4996509773284" />
+      <entry key="H2" value="263.8171227239238" />
+      <entry key="H4" value="273.66251805147596" />
+      <entry key="D1" value="282.24175861266133" />
+      <entry key="W1" value="283.7479419841771" />
+    </decayedShown>
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 8,
+  "fromUser": false
+}]]></component>
+  <component name="ProjectId" id="3EB0abM2FCxQYNvsr2YsTwmhqT8" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
+    "git-widget-placeholder": "prototype",
+    "junie.onboarding.icon.badge.shown": "true",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "/home/summers/Projects/retro-lsp",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "to.speed.mode.migration.done": "true",
+    "ts.external.directory.path": "/home/summers/Projects/retro-lsp/vscode/node_modules/typescript/lib"
+  }
+}]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-30f59d01ecdd-37e91769500f-intellij.indexing.shared.core-IU-261.24374.151" />
+        <option value="bundled-js-predefined-d6986cc7102b-31caf2ab9e3c-JavaScript-IU-261.24374.151" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="cdf625a2-de81-4673-a206-e9b797430fec" name="Changes" comment="" />
+      <created>1779636719458</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1779636719458</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>

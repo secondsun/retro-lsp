@@ -1,12 +1,6 @@
 package dev.secondsun.retrolsp.feature;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
-
 import com.google.gson.JsonObject;
-
 import dev.secondsun.lsp.CompletionItem;
 import dev.secondsun.lsp.CompletionItemKind;
 import dev.secondsun.lsp.CompletionList;
@@ -16,160 +10,176 @@ import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.lsp.TextEdit;
 import dev.secondsun.retro.util.Util;
 import dev.secondsun.retro.util.vo.TokenizedFile;
+import java.util.List;
+import java.util.Optional;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
+/** Completion feature providing suggestions for CA65 assembler control directives and commands. */
 public class DirectiveCompletionFeature implements CompletionFeature {
 
-    public static final List<String> CONTROL_COMMANDS = List.of(
-            ".A16",
-    ".A8",
-    ".ADDR",
-    ".ALIGN",
-    ".ASCIIZ",
-    ".ASSERT",
-    ".AUTOIMPORT",
-    ".BANKBYTES",
-    ".BSS",
-    ".BYT",
-    ".BYTE",
-    ".CASE",
-    ".CHARMAP",
-    ".CODE",
-    ".CONDES",
-    ".CONSTRUCTOR",
-    ".DATA",
-    ".DBYT",
-    ".DEBUGINFO",
-    ".DEFINE",
-    ".DEF",
-    ".DEFINED",
-    ".DESTRUCTOR",
-    ".DWORD",
-    ".ELSE",
-    ".ELSEIF",
-    ".END",
-    ".ENDENUM",
-    ".ENDIF",
-    ".ENDMAC",
-    ".ENDMACRO",
-    ".ENDPROC",
-    ".ENDREP",
-    ".ENDREPEAT",
-    ".ENDSCOPE",
-    ".ENDSTRUCT",
-    ".ENUM",
-    ".ERROR",
-    ".EXITMAC",
-    ".EXITMACRO",
-    ".EXPORT",
-    ".EXPORTZP",
-    ".FARADDR",
-    ".FEATURE",
-    ".FILEOPT",
-    ".FOPT",
-    ".FORCEIMPORT",
-    ".GLOBAL",
-    ".GLOBALZP",
-    ".HIBYTES",
-    ".I16",
-    ".I8",
-    ".IF",
-    ".IFBLANK",
-    ".IFCONST",
-    ".IFDEF",
-    ".IFNBLANK",
-    ".IFNDEF",
-    ".IFNREF",
-    ".IFP02",
-    ".IFP816",
-    ".IFPC02",
-    ".IFPSC02",
-    ".IFREF",
-    ".IMPORT",
-    ".IMPORTZP",
-    ".INCBIN",
-    ".INCLUDE",
-    ".INTERRUPTOR",
-    ".LINECONT",
-    ".LIST",
-    ".LISTBYTES",
-    ".LOBYTES",
-    ".LOCAL",
-    ".LOCALCHAR",
-    ".MACPACK",
-    ".MAC",
-    ".MACRO",
-    ".ORG",
-    ".OUT",
-    ".P02",
-    ".P816",
-    ".PAGELEN",
-    ".PAGELENGTH",
-    ".PC02",
-    ".POPSEG",
-    ".PROC",
-    ".PSC02",
-    ".PUSHSEG",
-    ".RELOC",
-    ".REPEAT",
-    ".RES",
-    ".RODATA",
-    ".SCOPE",
-    ".SEGMENT",
-    ".SETCPU",
-    ".SMART",
-    ".STRUCT",
-    ".SUNPLUS",
-    ".TAG",
-    ".WARNING",
-    ".WORD",
-    ".ZEROPAGE"
-        );
-    private Logger LOG = Logger.getLogger(DirectiveCompletionFeature.class.getName());
+  /** List of CA65 assembler control directives supported for autocompletion. */
+  public static final List<String> CONTROL_COMMANDS =
+      List.of(
+          ".A16",
+          ".A8",
+          ".ADDR",
+          ".ALIGN",
+          ".ASCIIZ",
+          ".ASSERT",
+          ".AUTOIMPORT",
+          ".BANKBYTES",
+          ".BSS",
+          ".BYT",
+          ".BYTE",
+          ".CASE",
+          ".CHARMAP",
+          ".CODE",
+          ".CONDES",
+          ".CONSTRUCTOR",
+          ".DATA",
+          ".DBYT",
+          ".DEBUGINFO",
+          ".DEFINE",
+          ".DEF",
+          ".DEFINED",
+          ".DESTRUCTOR",
+          ".DWORD",
+          ".ELSE",
+          ".ELSEIF",
+          ".END",
+          ".ENDENUM",
+          ".ENDIF",
+          ".ENDMAC",
+          ".ENDMACRO",
+          ".ENDPROC",
+          ".ENDREP",
+          ".ENDREPEAT",
+          ".ENDSCOPE",
+          ".ENDSTRUCT",
+          ".ENUM",
+          ".ERROR",
+          ".EXITMAC",
+          ".EXITMACRO",
+          ".EXPORT",
+          ".EXPORTZP",
+          ".FARADDR",
+          ".FEATURE",
+          ".FILEOPT",
+          ".FOPT",
+          ".FORCEIMPORT",
+          ".GLOBAL",
+          ".GLOBALZP",
+          ".HIBYTES",
+          ".I16",
+          ".I8",
+          ".IF",
+          ".IFBLANK",
+          ".IFCONST",
+          ".IFDEF",
+          ".IFNBLANK",
+          ".IFNDEF",
+          ".IFNREF",
+          ".IFP02",
+          ".IFP816",
+          ".IFPC02",
+          ".IFPSC02",
+          ".IFREF",
+          ".IMPORT",
+          ".IMPORTZP",
+          ".INCBIN",
+          ".INCLUDE",
+          ".INTERRUPTOR",
+          ".LINECONT",
+          ".LIST",
+          ".LISTBYTES",
+          ".LOBYTES",
+          ".LOCAL",
+          ".LOCALCHAR",
+          ".MACPACK",
+          ".MAC",
+          ".MACRO",
+          ".ORG",
+          ".OUT",
+          ".P02",
+          ".P816",
+          ".PAGELEN",
+          ".PAGELENGTH",
+          ".PC02",
+          ".POPSEG",
+          ".PROC",
+          ".PSC02",
+          ".PUSHSEG",
+          ".RELOC",
+          ".REPEAT",
+          ".RES",
+          ".RODATA",
+          ".SCOPE",
+          ".SEGMENT",
+          ".SETCPU",
+          ".SMART",
+          ".STRUCT",
+          ".SUNPLUS",
+          ".TAG",
+          ".WARNING",
+          ".WORD",
+          ".ZEROPAGE");
 
-    @Override
-    public void initialize(JsonObject initializationData) {
-        // TODO Auto-generated method stub
-        
+  private Logger LOG = Logger.getLogger(DirectiveCompletionFeature.class.getName());
+
+  /** Constructs a new {@code DirectiveCompletionFeature} instance. */
+  public DirectiveCompletionFeature() {}
+
+  @Override
+  public void initialize(JsonObject initializationData) {
+    // TODO Auto-generated method stub
+
+  }
+
+  @Override
+  public Optional<CompletionList> handle(
+      TextDocumentPositionParams params, TokenizedFile fileContent) {
+
+    var line = fileContent.getLineText(params.position.line);
+
+    var leftOfCursor = line.substring(0, params.position.character).trim();
+    if (leftOfCursor.startsWith(".")) {
+      var completionItems =
+          CONTROL_COMMANDS.stream()
+              .filter(cmd -> cmd.startsWith(leftOfCursor.toUpperCase()))
+              .map(
+                  text -> {
+                    var completionText = Util.trimCompletion(leftOfCursor, text);
+                    var item = new CompletionItem();
+                    item.label = text;
+                    item.kind = CompletionItemKind.Struct;
+
+                    item.textEdit =
+                        new TextEdit(
+                            new Range(
+                                new Position(params.position.line, params.position.character),
+                                new Position(params.position.line, line.length())),
+                            completionText);
+                    return item;
+                  })
+              .collect(Collectors.toList());
+
+      var list = new CompletionList();
+      list.items = completionItems;
+
+      return Optional.of(list);
     }
 
-    @Override
-    public Optional<CompletionList> handle(TextDocumentPositionParams params, TokenizedFile fileContent) {
-        
-        var line = fileContent.getLineText(params.position.line);
-        
-        var leftOfCursor = line.substring(0,params.position.character).trim();
-        if (leftOfCursor.startsWith(".")) {
-           var completionItems = CONTROL_COMMANDS.stream()
-                                    .filter(cmd->cmd.startsWith(leftOfCursor.toUpperCase()))
-                                    .map(text->
-                                    {
-                                        var completionText = Util.trimCompletion(leftOfCursor, text);
-                                        var item = new CompletionItem();
-                                        item.label = text;
-                                        item.kind = CompletionItemKind.Struct;
-                                        
-                                        item.textEdit = new TextEdit(new Range(new Position(params.position.line, params.position.character), 
-                                                                               new Position(params.position.line,line.length() )), 
-                                                                        completionText);
-                                        return item;
-                                    })
-                                    .collect(Collectors.toList());
+    return Optional.empty();
+  }
 
-            var list = new CompletionList();
-            list.items = completionItems;               
-                                    
-            return Optional.of(list);
-
-        }
-
-        return Optional.empty();
-    }
-
-    @Override
-    public boolean canComplete(TextDocumentPositionParams params, TokenizedFile fileContent) {
-        var line = fileContent.getLineText(params.position.line).trim();
-        var leftOfCursor = line.substring(0,params.position.character).trim();
-        return !CONTROL_COMMANDS.stream().filter(string -> string.startsWith(leftOfCursor.toUpperCase())).findAny().isEmpty();
-    }
-
+  @Override
+  public boolean canComplete(TextDocumentPositionParams params, TokenizedFile fileContent) {
+    var line = fileContent.getLineText(params.position.line).trim();
+    var leftOfCursor = line.substring(0, params.position.character).trim();
+    return !CONTROL_COMMANDS.stream()
+        .filter(string -> string.startsWith(leftOfCursor.toUpperCase()))
+        .findAny()
+        .isEmpty();
+  }
 }

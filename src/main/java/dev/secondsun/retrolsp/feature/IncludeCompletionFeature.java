@@ -1,14 +1,8 @@
 package dev.secondsun.retrolsp.feature;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.logging.Logger;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-
 import dev.secondsun.lsp.CompletionItem;
 import dev.secondsun.lsp.CompletionItemKind;
 import dev.secondsun.lsp.CompletionList;
@@ -18,91 +12,106 @@ import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.lsp.TextEdit;
 import dev.secondsun.retro.util.Util;
 import dev.secondsun.retro.util.vo.TokenizedFile;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Optional;
+import java.util.logging.Logger;
 
+/** Feature providing autocompletion for include directives and file paths. */
 public class IncludeCompletionFeature implements CompletionFeature {
 
+  private static final Logger LOG = Logger.getLogger(DocumentLinkFeature.class.getName());
+  private static final Gson GSON = new GsonBuilder().create();
 
-    private static final Logger LOG = Logger.getLogger(DocumentLinkFeature.class.getName());
-    private static final Gson GSON = new GsonBuilder().create();
+  /** Constructs a new {@code IncludeCompletionFeature} instance. */
+  public IncludeCompletionFeature() {}
 
+  @Override
+  public void initialize(JsonObject initializationData) {
+    var completionRegistrationOptions = new JsonObject();
+    completionRegistrationOptions.addProperty("resolveProvider", false);
+    initializationData.add("completionProvider", completionRegistrationOptions);
+  }
 
-    @Override
-    public void initialize(JsonObject initializationData) {
-        var completionRegistrationOptions = new JsonObject();
-        completionRegistrationOptions.addProperty("resolveProvider", false);
-        initializationData.add("completionProvider", completionRegistrationOptions);
+  @Override
+  public Optional<CompletionList> handle(
+      TextDocumentPositionParams params, TokenizedFile fileContent) {
+
+    if (fileContent == null || fileContent.textLines() < params.position.line) {
+      return Optional.empty();
     }
 
-    @Override
-    public Optional<CompletionList> handle(TextDocumentPositionParams params, TokenizedFile fileContent) {
+    CompletionList list = new CompletionList();
+    list.items = new ArrayList<>();
+    var line = fileContent.getLineText(params.position.line);
+    var stringLeftOfCursor =
+        line.substring(
+            0,
+            params
+                .position
+                .character); // I think that you can't replace the string before the cursor
 
-        if (fileContent == null || fileContent.textLines() < params.position.line) {
-            return Optional.empty();
+    var filePrefix = getPrefix(stringLeftOfCursor);
+
+    var parentDir = new File(params.textDocument.uri).getParentFile();
+    if (Util.isIncludeDirective(line)) {
+      for (File file : parentDir.listFiles(File::isDirectory)) {
+        if (!file.getName().startsWith(filePrefix)) {
+          continue;
         }
-        
-        CompletionList list = new CompletionList();
-        list.items = new ArrayList<>();
-        var line = fileContent.getLineText(params.position.line);
-        var stringLeftOfCursor = line.substring(0, params.position.character);// I think that you can't replace the string before the cursor
-        
-        var filePrefix = getPrefix(stringLeftOfCursor);
-        
-        var parentDir = new File(params.textDocument.uri).getParentFile();
-        if (Util.isIncludeDirective(line)) {
-            for (File file : parentDir.listFiles(File::isDirectory)) {
-                if (!file.getName().startsWith(filePrefix)){
-                    continue;
-                }
 
-                String replacement = Util.trimCompletion(stringLeftOfCursor, ".include \""+file.getName()+"\"");
+        String replacement =
+            Util.trimCompletion(stringLeftOfCursor, ".include \"" + file.getName() + "\"");
 
-                var item = new CompletionItem();
-                item.kind = CompletionItemKind.Folder;
-                item.label = file.getName() + "/";
-                item.textEdit = new TextEdit(new Range(new Position(params.position.line, params.position.character), 
-                                                       new Position(params.position.line,line.length() )), 
-                                                       replacement);
+        var item = new CompletionItem();
+        item.kind = CompletionItemKind.Folder;
+        item.label = file.getName() + "/";
+        item.textEdit =
+            new TextEdit(
+                new Range(
+                    new Position(params.position.line, params.position.character),
+                    new Position(params.position.line, line.length())),
+                replacement);
 
-                list.items.add(item);
-            }
-            for (File file : parentDir.listFiles(File::isFile)) {
-                if (!file.getName().startsWith(filePrefix)){
-                    continue;
-                }
-
-                String replacement = Util.trimCompletion(stringLeftOfCursor, ".include \""+file.getName()+"\"");
-
-
-                var item = new CompletionItem();
-                item.kind = CompletionItemKind.File;
-                item.label = file.getName();
-                item.textEdit = new TextEdit(new Range(new Position(params.position.line, params.position.character), 
-                                                       new Position(params.position.line,line.length() )), 
-                                            replacement);
-
-                list.items.add(item);
-            }
+        list.items.add(item);
+      }
+      for (File file : parentDir.listFiles(File::isFile)) {
+        if (!file.getName().startsWith(filePrefix)) {
+          continue;
         }
-        return Optional.of(list);
+
+        String replacement =
+            Util.trimCompletion(stringLeftOfCursor, ".include \"" + file.getName() + "\"");
+
+        var item = new CompletionItem();
+        item.kind = CompletionItemKind.File;
+        item.label = file.getName();
+        item.textEdit =
+            new TextEdit(
+                new Range(
+                    new Position(params.position.line, params.position.character),
+                    new Position(params.position.line, line.length())),
+                replacement);
+
+        list.items.add(item);
+      }
     }
+    return Optional.of(list);
+  }
 
-    private String getPrefix(String stringLeftOfCursor) {
-        var testArray = stringLeftOfCursor.split("\"");
-        if (testArray.length>1) {
-            return testArray[1];
-        } else {
-            return "";
-        }
-        
+  private String getPrefix(String stringLeftOfCursor) {
+    var testArray = stringLeftOfCursor.split("\"");
+    if (testArray.length > 1) {
+      return testArray[1];
+    } else {
+      return "";
     }
+  }
 
-    @Override
-    public boolean canComplete(TextDocumentPositionParams params, TokenizedFile fileContent) {
-        var line = fileContent.getLineText(params.position.line).trim();
-        var leftOfCursor = line.substring(0,params.position.character).trim();
-        return leftOfCursor.toUpperCase().startsWith(".INCLUDE");
-    }
-
-
-    
+  @Override
+  public boolean canComplete(TextDocumentPositionParams params, TokenizedFile fileContent) {
+    var line = fileContent.getLineText(params.position.line).trim();
+    var leftOfCursor = line.substring(0, params.position.character).trim();
+    return leftOfCursor.toUpperCase().startsWith(".INCLUDE");
+  }
 }

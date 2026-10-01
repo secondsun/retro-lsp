@@ -1,17 +1,26 @@
 #!/bin/bash
+# Builds the Java backend (clean package), creates the native jlink image for current platform,
+# and packages the VS Code extension.
 
 set -e
 
-# Needed if you have a java version other than 11 as default
-JAVA_HOME=/c/Users/secon/.sdkman/candidates/java/current/bin/java
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$DIR"
 
-# Build fat jar
-./scripts/link_mac.sh
-./scripts/link_windows.sh
+echo "=== 1. Building Java Language Server ==="
+./mvnw clean package -DskipTests
 
-# Build vsix
-vsce package -o build.vsix
+echo "=== 2. Creating jlink runtime ==="
+OS="$(uname -s)"
+case "$OS" in
+    Linux*)     ./scripts/link_linux.sh ;;
+    Darwin*)    ./scripts/link_mac.sh ;;
+    CYGWIN*|MINGW*|MSYS*) ./scripts/link_windows.sh ;;
+    *)          echo "Unknown OS $OS, skipping jlink" ;;
+esac
 
-code --install-extension build.vsix
-
-echo 'Reload VSCode to update extension'
+echo "=== 3. Packaging VS Code Extension ==="
+cd "$DIR/vscode"
+npm run compile
+npm run package
+echo "=== Build complete! ==="

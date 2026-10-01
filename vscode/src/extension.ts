@@ -3,29 +3,56 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import * as Path from 'path';
-import { workspace, ExtensionContext, IndentAction, languages } from 'vscode';
-import {LanguageClient,
-	ServerOptions,
-	TransportKind} from 'vscode-languageclient/node';
-
+import * as fs from 'fs';
+import * as path from 'path';
+import { workspace, ExtensionContext } from 'vscode';
 import {
-	LanguageClientOptions,
+    LanguageClient,
+    LanguageClientOptions,
+    ServerOptions,
+    TransportKind,
     RevealOutputChannelOn
-} from 'vscode-languageclient';
+} from 'vscode-languageclient/node';
 
-let client: LanguageClient;
+let client: LanguageClient | undefined;
+
+function getLauncherPath(context: ExtensionContext): string {
+    const config = workspace.getConfiguration('retroca65');
+    const configuredPath = config.get<string>('serverPath');
+    if (configuredPath && fs.existsSync(configuredPath)) {
+        return configuredPath;
+    }
+
+    const platformSubdir = process.platform === 'win32'
+        ? path.join('dist', 'windows', 'bin', 'launcher.bat')
+        : process.platform === 'darwin'
+            ? path.join('dist', 'mac', 'bin', 'launcher')
+            : path.join('dist', 'linux', 'bin', 'launcher');
+
+    // Check sibling of extension directory (project root)
+    const projectRootCandidate = path.resolve(context.extensionPath, '..', platformSubdir);
+    if (fs.existsSync(projectRootCandidate)) {
+        return projectRootCandidate;
+    }
+
+    // Fall back to extension-local dist if bundled
+    const bundledCandidate = path.resolve(context.extensionPath, platformSubdir);
+    if (fs.existsSync(bundledCandidate)) {
+        return bundledCandidate;
+    }
+
+    return projectRootCandidate;
+}
 
 export function activate(context: ExtensionContext) {
-	console.log('Activating retroca65');
+    console.log('Activating retroca65');
 
-    // Options to control the language client
-    let clientOptions: LanguageClientOptions = {
-        documentSelector: ['retroca65'],
+    const clientOptions: LanguageClientOptions = {
+        documentSelector: [{ scheme: 'file', language: 'retroca65' }],
         synchronize: {
             configurationSection: 'retroca65',
             fileEvents: [
-                workspace.createFileSystemWatcher('Makefile'),
+                workspace.createFileSystemWatcher('**/Makefile'),
                 workspace.createFileSystemWatcher('**/*.s'),
                 workspace.createFileSystemWatcher('**/*.i'),
                 workspace.createFileSystemWatcher('**/*.inc'),
@@ -33,54 +60,37 @@ export function activate(context: ExtensionContext) {
             ]
         },
         outputChannelName: 'retroca65',
-        revealOutputChannelOn: RevealOutputChannelOn.Info // never
-    }
+        revealOutputChannelOn: RevealOutputChannelOn.Info
+    };
 
-    //let launcher = Path.resolve('C:\\Users\\secon\\Projects\\retro-lsp\\target\\tm4e4lsp.exe'); //graalvm (build in 51s - 7 MB)
-     let launcher = Path.resolve('C:\\Users\\secon\\Projects\\retro-lsp\\dist\\windows\\bin\\launcher.bat'); //jlink  (build in 10s? - 40mb)
-    console.log(launcher);
-    
-    // Start the child java process
-    let serverOptions: ServerOptions = {
-            run : { command: launcher, transport: TransportKind.stdio,
-                    options: { cwd: context.extensionPath, shell:true }
-            },
-            debug : { command: launcher, transport: TransportKind.stdio,
-                options: { cwd: context.extensionPath, shell:true }
+    const launcher = getLauncherPath(context);
+    console.log(`retroca65 launcher path: ${launcher}`);
+
+    const serverOptions: ServerOptions = {
+        run: {
+            command: launcher,
+            transport: TransportKind.stdio,
+            options: { cwd: context.extensionPath, shell: true }
+        },
+        debug: {
+            command: launcher,
+            transport: TransportKind.stdio,
+            options: { cwd: context.extensionPath, shell: true }
         }
-    }
-    
+    };
 
-
-    // Create the language client and start the client.
-    let client = new LanguageClient('retroca65', 'retroca65 Language Server', serverOptions, clientOptions);
+    client = new LanguageClient('retroca65', 'retroca65 Language Server', serverOptions, clientOptions);
     try {
         client.start();
         context.subscriptions.push(client);
-
     } catch (error) {
-        console.log(error)
+        console.error('Failed to start retroca65 Language Client:', error);
     }
-
 }
 
 export function deactivate(): Thenable<void> | undefined {
-	if (!client) {
-		return undefined;
-	}
-	return client.stop();
-}
-function platformSpecificLauncher(): string[] {
-	switch (process.platform) {
-		case 'win32':
-            return ['C:\Users\secon\Projects\retro-lsp\scripts\launchgraalagent.bat'];
-
-		case 'darwin':
-			return ['dist', 'mac', 'bin', 'launcher'];
-
-		case 'linux':
-            return ['dist', 'linux', 'bin', 'launcher'];			
-	}
-
-	throw `unsupported platform: ${process.platform}`;
+    if (!client) {
+        return undefined;
+    }
+    return client.stop();
 }

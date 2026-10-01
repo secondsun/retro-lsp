@@ -1,14 +1,10 @@
 package dev.secondsun.retrolsp.feature;
 
-import java.io.IOException;
-import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
+import static dev.secondsun.retro.util.instruction.GSUInstruction.isInstruction;
+import static dev.secondsun.retro.util.instruction.GSUInstruction.mark;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
-
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.MarkedString;
 import dev.secondsun.lsp.Position;
@@ -16,118 +12,161 @@ import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.retro.util.*;
 import dev.secondsun.retro.util.vo.TokenizedFile;
-import dev.secondsun.sfxoptimizer.AllocationResult;
 import dev.secondsun.sfxoptimizer.Constants;
 import dev.secondsun.sfxoptimizer.IntervalKey;
 import dev.secondsun.sfxoptimizer.graphbuilder.CA65Grapher;
+import java.io.IOException;
+import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import static dev.secondsun.retro.util.instruction.GSUInstruction.isInstruction;
-import static dev.secondsun.retro.util.instruction.GSUInstruction.mark;
-
+/**
+ * Feature providing hover documentation and opcode/directive/symbol information in CA65 assembly
+ * code.
+ */
 public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> {
 
-    private final FileService fileService;
-    private final SymbolService symbolService;
-    private final CA65Grapher grapher;
+  private final FileService fileService;
+  private final SymbolService symbolService;
+  private final CA65Grapher grapher;
 
-    public HoverFeature(FileService fileService, SymbolService symbolService) {
-        this.fileService = fileService;
-        this.symbolService = symbolService;
-        this.grapher = new CA65Grapher(symbolService, fileService );
-    }
+  /**
+   * Constructs a new {@code HoverFeature} with the specified file and symbol services.
+   *
+   * @param fileService the file service used to resolve file references
+   * @param symbolService the symbol service used to inspect symbol definitions
+   */
+  public HoverFeature(FileService fileService, SymbolService symbolService) {
+    this.fileService = fileService;
+    this.symbolService = symbolService;
+    this.grapher = new CA65Grapher(symbolService, fileService);
+  }
 
-    @Override
-    public void initialize(JsonObject initializeData) {
-        initializeData.add("hoverProvider", new JsonPrimitive(true));
-    }
+  @Override
+  public void initialize(JsonObject initializeData) {
+    initializeData.add("hoverProvider", new JsonPrimitive(true));
+  }
 
-	public Optional<Hover> handle(TextDocumentPositionParams params, TokenizedFile fileContent) {
-        String line = fileContent.getLineText(params.position.line);
-        var lineTokens = fileContent.getLineTokens(params.position.line);
+  public Optional<Hover> handle(TextDocumentPositionParams params, TokenizedFile fileContent) {
+    String line = fileContent.getLineText(params.position.line);
+    var lineTokens = fileContent.getLineTokens(params.position.line);
 
-        Optional<Token> maybeToken = Util.getTokenAt(lineTokens, params.position.character);
+    Optional<Token> maybeToken = Util.getTokenAt(lineTokens, params.position.character);
 
-        if (maybeToken.isPresent()) {
-            var token = maybeToken.get();
-            String tokenText =  token.text();
-            var hover = new Hover();
-            hover.range = new Range(new Position(params.position.line, token.getStartIndex()),
-                    new Position(params.position.line, token.getEndIndex()));
+    if (maybeToken.isPresent()) {
+      var token = maybeToken.get();
+      String tokenText = token.text();
+      var hover = new Hover(new ArrayList<>());
+      hover.range =
+          new Range(
+              new Position(params.position.line, token.getStartIndex()),
+              new Position(params.position.line, token.getEndIndex()));
 
-            if (isInstruction(token)) {
-                mark(token);
-                var result = lookupHover(tokenText);
-                if (result != null) {
-                    hover.contents = Arrays.asList(result);
-                }
-                return Optional.of(hover);
-            } else  {
-                var symbol = symbolService.getLocation(tokenText);
-                 if (symbol != null) {
-                    try {
-                        var graph = grapher.graph(fileService.readLines(symbol.filename()), symbol.line());
+      if (isInstruction(token)) {
+        mark(token);
+        var result = lookupHover(tokenText);
+        if (result != null) {
+          hover.contents.add(result);
+        }
+        return Optional.of(hover);
+      } else {
+        var symbol = symbolService.getLocation(tokenText);
+        if (symbol != null) {
+          try {
+            var graph = grapher.graph(fileService.readLines(symbol.filename()), symbol.line());
 
-                        var intervals = Arrays.stream(Constants.Register.values()).map( register ->
-                                graph.getStartNode().intervals(new IntervalKey.RegisterKey(register))
-                        ).filter(Objects::nonNull).toList();
+            var intervals =
+                Arrays.stream(Constants.Register.values())
+                    .map(
+                        register ->
+                            graph.getStartNode().intervals(new IntervalKey.RegisterKey(register)))
+                    .filter(Objects::nonNull)
+                    .toList();
 
-                        var string = new StringBuilder( " Uses : ");
+            var string = new StringBuilder(" Uses : ");
 
-                                if (intervals.isEmpty() ) {
-                                    string.append(" NONE");
-                                } else {
-                                    intervals.forEach( interval -> {
-                                        string.append(String.format(" %s, ", interval.getKey().toString()));
-                                    });
-                                }
-
-
-                        return Optional.of(new Hover(List.of(new MarkedString(string.toString()))));
-                    } catch (IOException e) {
-                        Logger.getAnonymousLogger().log(Level.SEVERE, e.getMessage(),e);
-                        return Optional.of(new Hover(new ArrayList<>()));
-                    }
-                }
+            if (intervals.isEmpty()) {
+              string.append(" NONE");
+            } else {
+              intervals.forEach(
+                  interval -> {
+                    string.append(String.format(" %s, ", interval.getKey().toString()));
+                  });
             }
 
-
-        } else {
+            return Optional.of(new Hover(List.of(new MarkedString(string.toString()))));
+          } catch (IOException e) {
+            Logger.getAnonymousLogger().log(Level.SEVERE, e.getMessage(), e);
             return Optional.of(new Hover(new ArrayList<>()));
+          }
         }
-        return Optional.of(new Hover(new ArrayList<>()));
-	}
+      }
 
-
-    private MarkedString lookupHover(Token token) {
-
-
-
-        return switch (token.text().toUpperCase()) {
-            case "NOP"->new MarkedString("No operation");
-            case "R0","R1","R2","R3","R4","R5","R6","R7","R8","R9","R10","R11","R12","R13","R14","R15"->registers();
-            case "SFR" -> statusFlagRegister();
-            case "BRAMR", "PBR","ROMBR", "CFGR","SCBR","CLSR","SCMR","VCR","RAMBR","CBR"  -> controlRegisters();
-            default -> null;
-        };
-
-
+    } else {
+      return Optional.of(new Hover(new ArrayList<>()));
     }
-    
-    private MarkedString lookupHover(String tokenText) {
-        
-        return switch (tokenText.toUpperCase()) {
-            case "NOP"->new MarkedString("No operation");
-            case "R0","R1","R2","R3","R4","R5","R6","R7","R8","R9","R10","R11","R12","R13","R14","R15"->registers();
-            case "SFR" -> statusFlagRegister();
-            case "BRAMR", "PBR","ROMBR", "CFGR","SCBR","CLSR","SCMR","VCR","RAMBR","CBR"  -> controlRegisters();
-            default -> null;
-        };
-        
-        
-    }
+    return Optional.of(new Hover(new ArrayList<>()));
+  }
 
-    private MarkedString controlRegisters() {
-        return new MarkedString("""
+  private MarkedString lookupHover(Token token) {
+
+    return switch (token.text().toUpperCase()) {
+      case "NOP" -> new MarkedString("No operation");
+      case "R0",
+          "R1",
+          "R2",
+          "R3",
+          "R4",
+          "R5",
+          "R6",
+          "R7",
+          "R8",
+          "R9",
+          "R10",
+          "R11",
+          "R12",
+          "R13",
+          "R14",
+          "R15" ->
+          registers();
+      case "SFR" -> statusFlagRegister();
+      case "BRAMR", "PBR", "ROMBR", "CFGR", "SCBR", "CLSR", "SCMR", "VCR", "RAMBR", "CBR" ->
+          controlRegisters();
+      default -> null;
+    };
+  }
+
+  private MarkedString lookupHover(String tokenText) {
+
+    return switch (tokenText.toUpperCase()) {
+      case "NOP" -> new MarkedString("No operation");
+      case "R0",
+          "R1",
+          "R2",
+          "R3",
+          "R4",
+          "R5",
+          "R6",
+          "R7",
+          "R8",
+          "R9",
+          "R10",
+          "R11",
+          "R12",
+          "R13",
+          "R14",
+          "R15" ->
+          registers();
+      case "SFR" -> statusFlagRegister();
+      case "BRAMR", "PBR", "ROMBR", "CFGR", "SCBR", "CLSR", "SCMR", "VCR", "RAMBR", "CBR" ->
+          controlRegisters();
+      default -> null;
+    };
+  }
+
+  private MarkedString controlRegisters() {
+    return new MarkedString(
+        """
         | Register | Address |                                   | Size    |     |
         |----------|---------|-----------------------------------|---------|-----|
         | BRAMR    | 3033    | Backup RAM register               | 8 bits  | W   |
@@ -141,10 +180,11 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
         | RAMBR    | 303c    | ram bank register                 | 8 bits  | R   |
         | CBR      | 303e    | cache base register               | 16 bits | R   |
         """);
-    }
+  }
 
-    private MarkedString statusFlagRegister() {
-        return new MarkedString("""
+  private MarkedString statusFlagRegister() {
+    return new MarkedString(
+        """
         | Bit |                               Description                               |
         |:---:|:-----------------------------------------------------------------------:|
         | 0   | -                                                                       |
@@ -164,10 +204,11 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
         | 14  | -                                                                       |
         | 15  | IRQ Set to 1 when GSU caused an interrupt. Set to 0 when read by 658c16 |
         """);
-    }
+  }
 
-    private MarkedString registers() {
-        return new MarkedString("""
+  private MarkedString registers() {
+    return new MarkedString(
+        """
         | Register | Address | Description                               | Access from SNES |   |
         |----------|---------|-------------------------------------------|------------------|---|
         | R0       | 3000    | default source/destination register       | R/W              |   |
@@ -186,9 +227,6 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
         | R13      | 301a    | loop point address                        | R/W              |   |
         | R14      | 301c    | rom address for getb, getbh, getbl, getbs | R/W              |   |
         | R15      | 301e    | program counter                           | R/W              |   |
-        """
-        );
-    }
-
-    
+        """);
+  }
 }

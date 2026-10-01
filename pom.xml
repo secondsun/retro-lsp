@@ -7,7 +7,7 @@
 
   <groupId>dev.secondsun</groupId>
   <artifactId>retro-lsp</artifactId>
-  <version>1.0</version>
+  <version>1.0.1</version>
 
   <name>retro-lsp</name>
   <url>https://github.com/secondsun/retro-lsp</url>
@@ -71,7 +71,7 @@
     <dependency>
       <groupId>dev.secondsun</groupId>
       <artifactId>languageserver</artifactId>
-      <version>0.8</version>
+      <version>0.11.0</version>
     </dependency>
   </dependencies>
 

@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name (e.g. v1.0.0)'
+        required: false
+        type: string
+      publish_marketplace:
+        description: 'Publish to VS Code Marketplace (requires VSCE_PAT secret)'
+        required: false
+        type: boolean
+        default: false
+      publish_openvsx:
+        description: 'Publish to Open VSX Registry (requires OVSX_PAT secret)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 26
+        uses: actions/setup-java@v4
+        with:
+          java-version: '26'
+          distribution: 'oracle'
+          cache: 'maven'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'vscode/package-lock.json'
+
+      - name: Make Scripts Executable
+        run: chmod +x mvnw scripts/*.sh
+
+      - name: Check Code Formatting
+        run: ./mvnw spotless:check
+
+      - name: Run Tests
+        run: ./mvnw test
+
+      - name: Package Java Backend (JAR, Sources, Javadoc)
+        run: ./mvnw clean package -DskipTests
+
+      - name: Build JLink Linux Runtime
+        run: ./scripts/link_linux.sh
+
+      - name: Verify Headless LSP Handshake
+        run: node ./scripts/verify_lsp_handshake.mjs
+
+      - name: Archive Linux JLink Runtime
+        run: tar -czf retro-lsp-linux-x64.tar.gz -C dist/linux .
+
+      - name: Install VS Code Extension Dependencies
+        run: |
+          cd vscode
+          npm ci
+
+      - name: Compile and Lint VS Code Extension
+        run: |
+          cd vscode
+          npm run compile
+          npm run lint
+
+      - name: Package VS Code Extension (.vsix)
+        run: |
+          cd vscode
+          npm run package
+
+      - name: Determine Release Tag
+        id: release_tag
+        run: |
+          if [ -n "${{ inputs.tag_name }}" ]; then
+            echo "tag=${{ inputs.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: ${{ steps.release_tag.outputs.tag }}
+          files: |
+            vscode/*.vsix
+            retro-lsp-linux-x64.tar.gz
+            target/retro-lsp-*.jar
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+      - name: Publish to VS Code Marketplace
+        if: ${{ env.VSCE_PAT != '' && (startsWith(github.ref, 'refs/tags/v') || inputs.publish_marketplace) }}
+        run: |
+          cd vscode
+          npx @vscode/vsce publish --packagePath *.vsix -p "${{ secrets.VSCE_PAT }}"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX Registry
+        if: ${{ env.OVSX_PAT != '' && (startsWith(github.ref, 'refs/tags/v') || inputs.publish_openvsx) }}
+        run: |
+          cd vscode
+          npx ovsx publish *.vsix -p "${{ secrets.OVSX_PAT }}"
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}

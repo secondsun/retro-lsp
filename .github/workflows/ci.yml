@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build & Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 26
+        uses: actions/setup-java@v4
+        with:
+          java-version: '26'
+          distribution: 'oracle'
+          cache: 'maven'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'vscode/package-lock.json'
+
+      - name: Make Scripts Executable
+        run: chmod +x mvnw scripts/*.sh
+
+      - name: Check Java Formatting (Spotless)
+        run: ./mvnw spotless:check
+
+      - name: Run Java Unit Tests
+        run: ./mvnw test
+
+      - name: Verify Javadoc
+        run: ./mvnw javadoc:javadoc
+
+      - name: Package Java Backend
+        run: ./mvnw clean package -DskipTests
+
+      - name: Build JLink Linux Runtime
+        run: ./scripts/link_linux.sh
+
+      - name: Verify Headless LSP Handshake
+        run: node ./scripts/verify_lsp_handshake.mjs
+
+      - name: Install VS Code Extension Dependencies
+        run: |
+          cd vscode
+          npm ci
+
+      - name: Compile and Lint VS Code Extension
+        run: |
+          cd vscode
+          npm run compile
+          npm run lint
+
+      - name: Package VS Code Extension (.vsix)
+        run: |
+          cd vscode
+          npm run package
+
+      - name: Upload Extension VSIX Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retro-vscode-vsix
+          path: vscode/*.vsix
+          if-no-files-found: error

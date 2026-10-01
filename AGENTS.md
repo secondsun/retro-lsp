@@ -73,3 +73,19 @@ To add or modify an LSP feature (e.g., hover, definition, completion):
 4. Register the feature in `CA65LanguageServer.java`.
 5. Add unit tests under `src/test/java/dev/secondsun/`.
 6. Run `./scripts/verify.sh` to confirm both unit tests and the stdio handshake succeed.
+
+---
+
+## 5. CI & Release Pipelines (GitHub Actions)
+
+- **Continuous Integration (`.github/workflows/ci.yml`)**:
+  - Triggers on push and pull requests on all branches.
+  - Validates code formatting via Spotless (`./mvnw spotless:check`), Java tests, Javadoc validity, packaging, JLink Linux runtime generation, headless LSP handshake, and VS Code compilation, linting, and `.vsix` packaging.
+  - Uploads the built `.vsix` as a workflow artifact.
+
+- **Release Pipeline (`.github/workflows/release.yml`)**:
+  - Triggers on version tags (`v*`) or manual `workflow_dispatch`.
+  - Packages Java backend artifacts (`retro-lsp-*.jar`, javadocs, sources), builds the standalone JLink Linux runtime (`retro-lsp-linux-x64.tar.gz`), and compiles and packages the VS Code extension (`retro-vscode-*.vsix`).
+  - Creates a GitHub Release with all binary assets and auto-generated release notes.
+  - Optionally publishes to VS Code Marketplace and Open VSX if `VSCE_PAT` / `OVSX_PAT` repository secrets are configured.
+

@@ -6,4 +6,4 @@ bin/*
 .settings
 jdks/**
 dist/**
-.mvn/**
+

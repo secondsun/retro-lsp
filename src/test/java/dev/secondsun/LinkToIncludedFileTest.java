@@ -31,8 +31,8 @@ public class LinkToIncludedFileTest {
 
     var results = fileService.find(new URI("libSFX.i"));
     assertEquals(2, results.size());
-    assertTrue(results.get(0).toString().contains("workspace1"));
-    assertTrue(results.get(1).toString().contains("workspace2"));
+    assertTrue(results.stream().anyMatch(it -> it.toString().contains("workspace1")));
+    assertTrue(results.stream().anyMatch(it -> it.toString().contains("workspace2")));
 
     var feature = new DocumentLinkFeature(fileService);
     var params = new DocumentLinkParams();

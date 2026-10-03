@@ -40,7 +40,6 @@ Always verify changes using these standard commands:
 | **Lint Extension** | `cd vscode && npm run lint` | ESLint verification. |
 | **Bundle Extension** | `./scripts/bundle_extension.sh [target]` | Bundles JLink runtime into `vscode/server` and builds target `.vsix`. |
 | **Package Extension** | `cd vscode && npm run package` | Builds `.vsix` non-interactively via `@vscode/vsce`. |
-| **Full Release Build** | `./scripts/build.sh` | Cleans, packages backend, JLink runtime, and packages extension. |
 | **Full Release Build** | `./scripts/build.sh` | Cleans, packages backend, JLink runtime, and bundles platform extension. |
 
 ---
@@ -83,16 +82,12 @@ To add or modify an LSP feature (e.g., hover, definition, completion):
 
 - **Continuous Integration (`.github/workflows/ci.yml`)**:
   - Triggers on push and pull requests on all branches.
-  - Validates code formatting via Spotless (`./mvnw spotless:check`), Java tests, Javadoc validity, packaging, JLink Linux runtime generation, headless LSP handshake, and VS Code compilation, linting, and `.vsix` packaging.
   - Validates code formatting via Spotless (`./mvnw spotless:check`), Java tests, Javadoc validity, packaging, JLink Linux runtime generation, headless LSP handshake, VS Code compilation/linting, and bundles `retro-vscode-linux-x64-*.vsix`.
   - Uploads the built `.vsix` as a workflow artifact.
 
 - **Release Pipeline (`.github/workflows/release.yml`)**:
   - Triggers on version tags (`v*`) or manual `workflow_dispatch`.
-  - Packages Java backend artifacts (`retro-lsp-*.jar`, javadocs, sources), builds the standalone JLink Linux runtime (`retro-lsp-linux-x64.tar.gz`), and compiles and packages the VS Code extension (`retro-vscode-*.vsix`).
   - Uses a GitHub Actions matrix to build native runtimes and platform-specific VSIX packages across `linux-x64`, `darwin-arm64`, and `win32-x64`.
   - Packages standalone runtime archives (`retro-lsp-<target>.*`) and Java backend artifacts (`retro-lsp-*.jar`).
   - Creates a GitHub Release with all binary assets and auto-generated release notes.
-  - Optionally publishes to VS Code Marketplace and Open VSX if `VSCE_PAT` / `OVSX_PAT` repository secrets are configured.
-
   - Publishes each platform VSIX to VS Code Marketplace and Open VSX if `VSCE_PAT` / `OVSX_PAT` repository secrets are configured.

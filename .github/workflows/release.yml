@@ -25,8 +25,6 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build & Publish Release
   build-backend:
     name: Build Java Backend (Base Artifacts)
     runs-on: ubuntu-latest
@@ -44,13 +42,6 @@ jobs:
           distribution: 'oracle'
           cache: 'maven'
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: 'vscode/package-lock.json'
-
       - name: Make Scripts Executable
         run: chmod +x mvnw scripts/*.sh
 
@@ -66,8 +57,6 @@ jobs:
       - name: Package Java Backend (JAR, Sources, Javadoc)
         run: ./mvnw clean package -DskipTests
 
-      - name: Build JLink Linux Runtime
-        run: ./scripts/link_linux.sh
       - name: Upload Backend JAR Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -75,7 +64,6 @@ jobs:
           path: target/retro-lsp-*.jar
           if-no-files-found: error
 
-      - name: Verify Headless LSP Handshake
   build-platforms:
     name: Build Platform Runtime & VSIX (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -134,8 +122,6 @@ jobs:
         if: matrix.target == 'linux-x64'
         run: node ./scripts/verify_lsp_handshake.mjs
 
-      - name: Archive Linux JLink Runtime
-        run: tar -czf retro-lsp-linux-x64.tar.gz -C dist/linux .
       - name: Archive Platform JLink Runtime
         run: |
           if [ "${{ matrix.archive_ext }}" = "zip" ]; then
@@ -154,13 +140,10 @@ jobs:
           cd vscode
           npm run compile
           npm run lint
+
       - name: Bundle and Package Platform VSIX
         run: ./scripts/bundle_extension.sh ${{ matrix.target }}
 
-      - name: Package VS Code Extension (.vsix)
-        run: |
-          cd vscode
-          npm run package
       - name: Upload Platform Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -205,10 +188,6 @@ jobs:
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
           name: ${{ steps.release_tag.outputs.tag }}
-          files: |
-            vscode/*.vsix
-            retro-lsp-linux-x64.tar.gz
-            target/retro-lsp-*.jar
           files: release-assets/*
           generate_release_notes: true
           draft: false
@@ -217,11 +196,9 @@ jobs:
       - name: Publish to VS Code Marketplace
         if: ${{ env.VSCE_PAT != '' && (startsWith(github.ref, 'refs/tags/v') || inputs.publish_marketplace) }}
         run: |
-          cd vscode
-          npx @vscode/vsce publish --packagePath *.vsix -p "${{ secrets.VSCE_PAT }}"
           for vsix in release-assets/*.vsix; do
             echo "Publishing $vsix to VS Code Marketplace..."
-            npx @vscode/vsce publish --packagePath "$vsix" -p "${{ secrets.VSCE_PAT }}"
+            npx --yes @vscode/vsce publish --packagePath "$vsix" -p "${{ secrets.VSCE_PAT }}"
           done
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -229,11 +206,9 @@ jobs:
       - name: Publish to Open VSX Registry
         if: ${{ env.OVSX_PAT != '' && (startsWith(github.ref, 'refs/tags/v') || inputs.publish_openvsx) }}
         run: |
-          cd vscode
-          npx ovsx publish *.vsix -p "${{ secrets.OVSX_PAT }}"
           for vsix in release-assets/*.vsix; do
             echo "Publishing $vsix to Open VSX Registry..."
-            npx ovsx publish "$vsix" -p "${{ secrets.OVSX_PAT }}"
+            npx --yes ovsx publish "$vsix" -p "${{ secrets.OVSX_PAT }}"
           done
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}

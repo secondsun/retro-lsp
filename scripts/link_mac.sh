@@ -9,4 +9,8 @@ $JAVA_HOME/bin/jlink \
   --add-modules ALL-MODULE-PATH \
   --launcher launcher=dev.secondsun.retrolsp/dev.secondsun.retrolsp.Main \
   --output dist/mac \
-  --vm=server
+  --vm=server \
+  --strip-debug \
+  --no-header-files \
+  --no-man-pages \
+  --compress zip-6

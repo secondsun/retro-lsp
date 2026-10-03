@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds the Java backend (clean package), creates the native jlink image for current platform,
-# and packages the VS Code extension.
+# and packages the VS Code extension bundled with the language server.
 
 set -e
 
@@ -19,8 +19,7 @@ case "$OS" in
     *)          echo "Unknown OS $OS, skipping jlink" ;;
 esac
 
-echo "=== 3. Packaging VS Code Extension ==="
-cd "$DIR/vscode"
-npm run compile
-npm run package
+echo "=== 3. Bundling and Packaging VS Code Extension ==="
+./scripts/bundle_extension.sh "$1"
+
 echo "=== Build complete! ==="

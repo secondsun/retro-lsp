@@ -68,10 +68,13 @@ jobs:
         run: |
           cd vscode
           npm run package
+      - name: Bundle and Package VS Code Extension (.vsix)
+        run: ./scripts/bundle_extension.sh linux-x64
 
       - name: Upload Extension VSIX Artifact
         uses: actions/upload-artifact@v4
         with:
           name: retro-vscode-vsix
+          name: retro-vscode-linux-x64-vsix
           path: vscode/*.vsix
           if-no-files-found: error

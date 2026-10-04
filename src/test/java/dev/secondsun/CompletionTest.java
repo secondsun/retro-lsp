@@ -42,6 +42,46 @@ public class CompletionTest {
             });
   }
 
+  @Test
+  public void testDirectiveCompletionWithIndentation() {
+    var completionFeature = new DirectiveCompletionFeature();
+    var fileContent = new CA65Scanner().tokenize("    .by\n");
+    // Indented line: 4 spaces followed by .by. Cursor is at column 7.
+    boolean canComplete = completionFeature.canComplete(documentPositionParams(0, 7), fileContent);
+    org.junit.jupiter.api.Assertions.assertTrue(canComplete);
+
+    var completionList = completionFeature.handle(documentPositionParams(0, 7), fileContent);
+    org.junit.jupiter.api.Assertions.assertTrue(completionList.isPresent());
+    org.junit.jupiter.api.Assertions.assertFalse(completionList.get().items.isEmpty());
+  }
+
+  @Test
+  public void testDirectiveCompletionDoesNotCompleteOnWhitespace() {
+    var completionFeature = new DirectiveCompletionFeature();
+    var fileContent = new CA65Scanner().tokenize("    \n");
+    // Only whitespace on the line. Cursor is at column 4.
+    boolean canComplete = completionFeature.canComplete(documentPositionParams(0, 4), fileContent);
+    org.junit.jupiter.api.Assertions.assertFalse(
+        canComplete, "Directive completion should not match empty/whitespace lines");
+  }
+
+  @Test
+  public void testDirectiveCompletionPreservesTrailingContent() {
+    var completionFeature = new DirectiveCompletionFeature();
+    var fileContent = new CA65Scanner().tokenize(".byt   $12, $34\n");
+    // Cursor at col 4 (after .byt). Trailing content: "   $12, $34"
+    var completionList = completionFeature.handle(documentPositionParams(0, 4), fileContent);
+    org.junit.jupiter.api.Assertions.assertTrue(completionList.isPresent());
+    var items = completionList.get().items;
+    org.junit.jupiter.api.Assertions.assertFalse(items.isEmpty());
+    for (var item : items) {
+      org.junit.jupiter.api.Assertions.assertNotEquals(
+          fileContent.getLineText(0).length(),
+          item.textEdit.range.end.character,
+          "TextEdit should not erase the rest of the line");
+    }
+  }
+
   private static TextDocumentPositionParams documentPositionParams(int line, int column) {
     final URI filepath = URI.create("file://bar/foo/baz.s");
     return new TextDocumentPositionParams(

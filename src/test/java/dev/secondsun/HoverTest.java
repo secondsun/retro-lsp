@@ -105,4 +105,54 @@ public class HoverTest {
     assertNotNull(hoverResult);
     assertTrue(hoverResult.get().contents.isEmpty());
   }
+
+  @Test
+  public void testHoverWithNullFileContent() {
+    var fileService = new dev.secondsun.retro.util.FileService();
+    var symbolService = new dev.secondsun.retro.util.SymbolService();
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+    var params =
+        new TextDocumentPositionParams(
+            new TextDocumentIdentifier(URI.create("file:///test.s")), new Position(0, 0));
+
+    var result = hoverFeature.handle(params, null);
+    assertNotNull(result);
+    assertTrue(result.isPresent());
+    assertTrue(result.get().contents.isEmpty());
+  }
+
+  @Test
+  public void testHoverLineOutOfBounds() {
+    var fileService = new dev.secondsun.retro.util.FileService();
+    var symbolService = new dev.secondsun.retro.util.SymbolService();
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+    var fileContent = new dev.secondsun.retro.util.CA65Scanner().tokenize("nop\n");
+    var params =
+        new TextDocumentPositionParams(
+            new TextDocumentIdentifier(URI.create("file:///test.s")), new Position(10, 0));
+
+    var result = hoverFeature.handle(params, fileContent);
+    assertNotNull(result);
+    assertTrue(result.isPresent());
+    assertTrue(result.get().contents.isEmpty());
+  }
+
+  @Test
+  public void testHoverOnSymbolHandlesRuntimeFailureGracefully() {
+    var fileService = new dev.secondsun.retro.util.FileService();
+    var symbolService = new dev.secondsun.retro.util.SymbolService();
+    var targetUri = URI.create("file:///non_gsu_file.s");
+    symbolService.addDefinition(
+        "myData", new dev.secondsun.retro.util.vo.Location(targetUri, 0, 0, 6));
+
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+    var fileContent = new dev.secondsun.retro.util.CA65Scanner().tokenize("lda myData\n");
+    var params =
+        new TextDocumentPositionParams(
+            new TextDocumentIdentifier(URI.create("file:///test.s")), new Position(0, 5));
+
+    var result = hoverFeature.handle(params, fileContent);
+    assertNotNull(result);
+    assertTrue(result.isPresent());
+  }
 }

@@ -140,9 +140,15 @@ public class DirectiveCompletionFeature implements CompletionFeature {
   public Optional<CompletionList> handle(
       TextDocumentPositionParams params, TokenizedFile fileContent) {
 
-    var line = fileContent.getLineText(params.position.line);
+    if (fileContent == null
+        || params.position.line < 0
+        || params.position.line >= fileContent.textLines()) {
+      return Optional.empty();
+    }
 
-    var leftOfCursor = line.substring(0, params.position.character).trim();
+    var line = fileContent.getLineText(params.position.line);
+    int col = Math.max(0, Math.min(params.position.character, line.length()));
+    var leftOfCursor = line.substring(0, col).stripLeading();
     if (leftOfCursor.startsWith(".")) {
       var completionItems =
           CONTROL_COMMANDS.stream()
@@ -154,11 +160,17 @@ public class DirectiveCompletionFeature implements CompletionFeature {
                     item.label = text;
                     item.kind = CompletionItemKind.Struct;
 
+                    int endCol = col;
+                    while (endCol < line.length()
+                        && Character.isLetterOrDigit(line.charAt(endCol))) {
+                      endCol++;
+                    }
+
                     item.textEdit =
                         new TextEdit(
                             new Range(
-                                new Position(params.position.line, params.position.character),
-                                new Position(params.position.line, line.length())),
+                                new Position(params.position.line, col),
+                                new Position(params.position.line, endCol)),
                             completionText);
                     return item;
                   })
@@ -175,8 +187,17 @@ public class DirectiveCompletionFeature implements CompletionFeature {
 
   @Override
   public boolean canComplete(TextDocumentPositionParams params, TokenizedFile fileContent) {
-    var line = fileContent.getLineText(params.position.line).trim();
-    var leftOfCursor = line.substring(0, params.position.character).trim();
+    if (fileContent == null
+        || params.position.line < 0
+        || params.position.line >= fileContent.textLines()) {
+      return false;
+    }
+    var line = fileContent.getLineText(params.position.line);
+    int col = Math.max(0, Math.min(params.position.character, line.length()));
+    var leftOfCursor = line.substring(0, col).stripLeading();
+    if (!leftOfCursor.startsWith(".")) {
+      return false;
+    }
     return !CONTROL_COMMANDS.stream()
         .filter(string -> string.startsWith(leftOfCursor.toUpperCase()))
         .findAny()

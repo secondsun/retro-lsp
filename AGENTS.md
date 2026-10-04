@@ -63,6 +63,9 @@ When modifying or refactoring this repository, you MUST respect these invariants
 5. **Node16 Resolution in VS Code**:
    - `vscode/tsconfig.json` uses `"module": "Node16"` and `"moduleResolution": "Node16"`.
    - Imports from `vscode-languageclient` must use subpath exports: `import ... from "vscode-languageclient/node"`.
+6. **Java Version Cadence over GraalVM**:
+   - Priority is given to adopting newer Java features and staying on current/rapid JDK releases (e.g., Java 26+) rather than holding back language features or downgrading compiler targets for GraalVM Native Image LTS release cycles.
+   - Do not spend effort attempting to support GraalVM Native Image or backporting bytecode until the next Java LTS release (JDK 29) is available. JLink remains the standard packaging mechanism across all supported platforms.
 
 ---
 

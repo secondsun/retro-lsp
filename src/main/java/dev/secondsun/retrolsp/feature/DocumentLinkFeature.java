@@ -44,11 +44,14 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
   @Override
   public Optional<List<DocumentLink>> handle(DocumentLinkParams params, TokenizedFile fileContent) {
     List<DocumentLink> links = new ArrayList<>();
+    if (fileContent == null) {
+      return Optional.of(links);
+    }
     URI currentDir;
     try {
       currentDir = getCurrentDirectory(params.textDocument.uri);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+    } catch (Exception e) {
+      return Optional.of(links);
     }
     IntStream.range(0, fileContent.textLines())
         .forEach(
@@ -56,27 +59,30 @@ public class DocumentLinkFeature implements Feature<DocumentLinkParams, List<Doc
               var line = fileContent.getLineText(idx);
               if (Util.isIncludeDirective(line)) {
                 try {
-                  // Ok we're parsing out the filename from the line.
-                  // the format is .include "fileName" ; comment
-                  // this is pretty hardcoded in ca65 so I'm not feeling
-                  // bad about being messy here though using the grammar would be smarter
-
-                  // We're splitting comments, then splitting the string
-                  var fileName = fileContent.getLineTokens(idx).get(1).text().replace("\"", "");
-                  // Find knows about relative files and resolves to files on the hard disk.
-                  var files = fs.find(URI.create(fileName), currentDir);
-                  for (URI file : files) {
-
-                    var link = new DocumentLink();
-                    link.target = file.toString();
-                    link.range =
-                        new Range(
-                            new Position(idx, line.indexOf(fileName)),
-                            new Position(idx, line.indexOf(fileName) + fileName.length()));
-                    links.add(link);
+                  var lineTokens = fileContent.getLineTokens(idx);
+                  if (lineTokens != null && lineTokens.size() > 1) {
+                    var fileName = lineTokens.get(1).text().replace("\"", "");
+                    URI fileUri;
+                    try {
+                      fileUri = URI.create(fileName);
+                    } catch (Exception e) {
+                      fileUri = new File(fileName).toURI();
+                    }
+                    var files = fs.find(fileUri, currentDir);
+                    int startIdx = line.indexOf(fileName);
+                    if (startIdx >= 0) {
+                      for (URI file : files) {
+                        var link = new DocumentLink();
+                        link.target = file.toString();
+                        link.range =
+                            new Range(
+                                new Position(idx, startIdx),
+                                new Position(idx, startIdx + fileName.length()));
+                        links.add(link);
+                      }
+                    }
                   }
-
-                } catch (ArrayIndexOutOfBoundsException ignore) {
+                } catch (Exception ignore) {
                 }
               }
             });

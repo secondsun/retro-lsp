@@ -4,38 +4,38 @@ Language Server Protocol (LSP) implementation for retro game development on the 
 
 ## Installation
 
-Pre-built binaries and extension packages are published on [GitHub Releases](https://github.com/secondsun/retro-lsp/releases).
+The extension and language server are distributed as self-contained `.vsix` packages published on [GitHub Releases](https://github.com/secondsun/retro-lsp/releases). Each `.vsix` comes with the native language server runtime bundled inside — **no Java installation or external dependencies are required**.
 
-### 1. VS Code Extension
+### 1. Download the `.vsix` for Your Platform
 
-Platform-specific `.vsix` packages come bundled with a self-contained runtime — **no Java installation required**.
+Visit the [GitHub Releases](https://github.com/secondsun/retro-lsp/releases) page and download the `.vsix` matching your platform:
 
-1. Download the `.vsix` for your operating system from the latest [GitHub Release](https://github.com/secondsun/retro-lsp/releases):
-   - **Linux (x64)**: `retro-vscode-linux-x64-<version>.vsix`
-   - **macOS (Apple Silicon)**: `retro-vscode-darwin-arm64-<version>.vsix`
-   - **Windows (x64)**: `retro-vscode-win32-x64-<version>.vsix`
-2. Install the `.vsix` in VS Code:
-   - **Via GUI**: Open the Extensions view (`Ctrl+Shift+X` / `Cmd+Shift+X`), click the `···` menu at the top right, select **Install from VSIX...**, and choose the downloaded file.
-   - **Via Command Line**:
-     ```bash
-     code --install-extension retro-vscode-<platform>-<version>.vsix
-     ```
+| Platform | File |
+| :--- | :--- |
+| **Linux (x64)** | `retro-vscode-linux-x64-<version>.vsix` |
+| **macOS (Apple Silicon)** | `retro-vscode-darwin-arm64-<version>.vsix` |
+| **Windows (x64)** | `retro-vscode-win32-x64-<version>.vsix` |
 
-### 2. Standalone Language Server (Neovim, Helix, Emacs, Sublime)
+### 2. Install the `.vsix` into VS Code
 
-For editors other than VS Code, standalone native runtimes are available:
+You can install the `.vsix` file using either the VS Code graphical interface or the command line:
 
-1. Download the archive for your platform from [GitHub Releases](https://github.com/secondsun/retro-lsp/releases):
-   - **Linux (x64)**: `retro-lsp-linux-x64.tar.gz`
-   - **macOS (Apple Silicon)**: `retro-lsp-darwin-arm64.tar.gz`
-   - **Windows (x64)**: `retro-lsp-win32-x64.zip`
-2. Extract the archive into a directory of your choice (e.g. `~/.local/share/retro-lsp` or `C:\tools\retro-lsp`).
-3. The executable launcher is in the `bin/` directory:
-   - Linux / macOS: `bin/launcher`
-   - Windows: `bin/launcher.bat`
-4. Configure your editor's LSP client to execute the launcher over standard I/O (`stdio`) for CA65 and SNES assembly files (`.s`, `.sgs`, `.i`, `.inc`).
+#### Method A: From the VS Code UI
+1. Open VS Code.
+2. Go to the **Extensions** view by clicking the Extensions icon in the Activity Bar or pressing `Ctrl+Shift+X` (Linux/Windows) / `Cmd+Shift+X` (macOS).
+3. Click the **`···`** (Views and More Actions) menu button in the top-right corner of the Extensions panel.
+4. Select **Install from VSIX...**
+5. Locate and select the downloaded `.vsix` file.
+6. Once installation completes, the extension is ready to use!
 
-*(Optional)* If you prefer running with your own Java installation (Java 26+), you can download `retro-lsp-<version>.jar` and run `java -jar retro-lsp-<version>.jar`.
+#### Method B: From the Terminal
+Run the following command (substituting your downloaded file name):
+
+```bash
+code --install-extension retro-vscode-<platform>-<version>.vsix
+```
+
+*(If you use VS Code Insiders, VSCodium, or Cursor, replace `code` with `code-insiders`, `codium`, or `cursor` respectively.)*
 
 ## Configuration
 

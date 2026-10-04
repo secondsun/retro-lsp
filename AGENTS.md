@@ -88,6 +88,5 @@ To add or modify an LSP feature (e.g., hover, definition, completion):
 - **Release Pipeline (`.github/workflows/release.yml`)**:
   - Triggers on version tags (`v*`) or manual `workflow_dispatch`.
   - Uses a GitHub Actions matrix to build native runtimes and platform-specific VSIX packages across `linux-x64`, `darwin-arm64`, and `win32-x64`.
-  - Packages standalone runtime archives (`retro-lsp-<target>.*`) and Java backend artifacts (`retro-lsp-*.jar`).
-  - Creates a GitHub Release with all binary assets and auto-generated release notes.
+  - Creates a GitHub Release with platform-specific `.vsix` packages and auto-generated release notes.
   - Publishes each platform VSIX to VS Code Marketplace and Open VSX if `VSCE_PAT` / `OVSX_PAT` repository secrets are configured.

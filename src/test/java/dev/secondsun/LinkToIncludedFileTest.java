@@ -41,4 +41,40 @@ public class LinkToIncludedFileTest {
     var result = feature.handle(params, new CA65Scanner().tokenize(".include \"libSFX.i\"")).get();
     assertEquals(2, result.size());
   }
+
+  @Test
+  public void testIncompleteIncludeDirectiveDoesNotCrash() {
+    var fileService = new FileService();
+    var feature = new DocumentLinkFeature(fileService);
+    var params = new DocumentLinkParams();
+    params.textDocument = new TextDocumentIdentifier(URI.create("file:///test.s"));
+
+    var result = feature.handle(params, new CA65Scanner().tokenize(".include \n"));
+    assertTrue(result.isPresent());
+    assertTrue(result.get().isEmpty());
+  }
+
+  @Test
+  public void testIncludeWithSpacesDoesNotCrash() {
+    var fileService = new FileService();
+    var feature = new DocumentLinkFeature(fileService);
+    var params = new DocumentLinkParams();
+    params.textDocument = new TextDocumentIdentifier(URI.create("file:///test.s"));
+
+    var result =
+        feature.handle(params, new CA65Scanner().tokenize(".include \"my test file.s\"\n"));
+    assertTrue(result.isPresent());
+  }
+
+  @Test
+  public void testNullFileContentDoesNotCrash() {
+    var fileService = new FileService();
+    var feature = new DocumentLinkFeature(fileService);
+    var params = new DocumentLinkParams();
+    params.textDocument = new TextDocumentIdentifier(URI.create("file:///test.s"));
+
+    var result = feature.handle(params, null);
+    assertTrue(result.isPresent());
+    assertTrue(result.get().isEmpty());
+  }
 }

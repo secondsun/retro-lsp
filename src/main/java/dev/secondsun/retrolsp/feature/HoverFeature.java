@@ -15,7 +15,6 @@ import dev.secondsun.retro.util.vo.TokenizedFile;
 import dev.secondsun.sfxoptimizer.Constants;
 import dev.secondsun.sfxoptimizer.IntervalKey;
 import dev.secondsun.sfxoptimizer.graphbuilder.CA65Grapher;
-import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -28,6 +27,7 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
 
   private final FileService fileService;
   private final SymbolService symbolService;
+  private final ProjectService projectService;
   private final CA65Grapher grapher;
 
   /**
@@ -37,8 +37,21 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
    * @param symbolService the symbol service used to inspect symbol definitions
    */
   public HoverFeature(FileService fileService, SymbolService symbolService) {
+    this(fileService, symbolService, null);
+  }
+
+  /**
+   * Constructs a new {@code HoverFeature} with file, symbol, and project services.
+   *
+   * @param fileService the file service used to resolve file references
+   * @param symbolService the symbol service used to inspect symbol definitions
+   * @param projectService the project service providing cached files
+   */
+  public HoverFeature(
+      FileService fileService, SymbolService symbolService, ProjectService projectService) {
     this.fileService = fileService;
     this.symbolService = symbolService;
+    this.projectService = projectService;
     this.grapher = new CA65Grapher(symbolService, fileService);
   }
 
@@ -48,10 +61,19 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
   }
 
   public Optional<Hover> handle(TextDocumentPositionParams params, TokenizedFile fileContent) {
-    String line = fileContent.getLineText(params.position.line);
-    var lineTokens = fileContent.getLineTokens(params.position.line);
+    if (fileContent == null
+        || params.position.line < 0
+        || params.position.line >= fileContent.textLines()) {
+      return Optional.of(new Hover(new ArrayList<>()));
+    }
 
-    Optional<Token> maybeToken = Util.getTokenAt(lineTokens, params.position.character);
+    var lineTokens = fileContent.getLineTokens(params.position.line);
+    if (lineTokens == null || lineTokens.isEmpty()) {
+      return Optional.of(new Hover(new ArrayList<>()));
+    }
+
+    int col = Math.max(0, params.position.character);
+    Optional<Token> maybeToken = Util.getTokenAt(lineTokens, col);
 
     if (maybeToken.isPresent()) {
       var token = maybeToken.get();
@@ -73,30 +95,43 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
         var symbol = symbolService.getLocation(tokenText);
         if (symbol != null) {
           try {
-            var graph = grapher.graph(fileService.readLines(symbol.filename()), symbol.line());
-
-            var intervals =
-                Arrays.stream(Constants.Register.values())
-                    .map(
-                        register ->
-                            graph.getStartNode().intervals(new IntervalKey.RegisterKey(register)))
-                    .filter(Objects::nonNull)
-                    .toList();
-
-            var string = new StringBuilder(" Uses : ");
-
-            if (intervals.isEmpty()) {
-              string.append(" NONE");
-            } else {
-              intervals.forEach(
-                  interval -> {
-                    string.append(String.format(" %s, ", interval.getKey().toString()));
-                  });
+            TokenizedFile targetFile = null;
+            if (projectService != null) {
+              targetFile = projectService.getFileContents(symbol.filename());
             }
+            if (targetFile == null || targetFile == TokenizedFile.EMPTY) {
+              targetFile = fileService.readLines(symbol.filename());
+            }
+            if (targetFile != null && targetFile != TokenizedFile.EMPTY) {
+              var graph = grapher.graph(targetFile, symbol.line());
+              if (graph != null && graph.getStartNode() != null) {
+                var intervals =
+                    Arrays.stream(Constants.Register.values())
+                        .map(
+                            register ->
+                                graph
+                                    .getStartNode()
+                                    .intervals(new IntervalKey.RegisterKey(register)))
+                        .filter(Objects::nonNull)
+                        .toList();
 
-            return Optional.of(new Hover(List.of(new MarkedString(string.toString()))));
-          } catch (IOException e) {
-            Logger.getAnonymousLogger().log(Level.SEVERE, e.getMessage(), e);
+                var string = new StringBuilder(" Uses : ");
+
+                if (intervals.isEmpty()) {
+                  string.append(" NONE");
+                } else {
+                  intervals.forEach(
+                      interval -> {
+                        string.append(String.format(" %s, ", interval.getKey().toString()));
+                      });
+                }
+
+                return Optional.of(new Hover(List.of(new MarkedString(string.toString()))));
+              }
+            }
+          } catch (Exception e) {
+            Logger.getAnonymousLogger()
+                .log(Level.WARNING, "Failed to analyze hover graph: " + e.getMessage(), e);
             return Optional.of(new Hover(new ArrayList<>()));
           }
         }
@@ -106,34 +141,6 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
       return Optional.of(new Hover(new ArrayList<>()));
     }
     return Optional.of(new Hover(new ArrayList<>()));
-  }
-
-  private MarkedString lookupHover(Token token) {
-
-    return switch (token.text().toUpperCase()) {
-      case "NOP" -> new MarkedString("No operation");
-      case "R0",
-          "R1",
-          "R2",
-          "R3",
-          "R4",
-          "R5",
-          "R6",
-          "R7",
-          "R8",
-          "R9",
-          "R10",
-          "R11",
-          "R12",
-          "R13",
-          "R14",
-          "R15" ->
-          registers();
-      case "SFR" -> statusFlagRegister();
-      case "BRAMR", "PBR", "ROMBR", "CFGR", "SCBR", "CLSR", "SCMR", "VCR", "RAMBR", "CBR" ->
-          controlRegisters();
-      default -> null;
-    };
   }
 
   private MarkedString lookupHover(String tokenText) {

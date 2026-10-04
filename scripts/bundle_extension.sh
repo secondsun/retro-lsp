@@ -80,9 +80,9 @@ cd "$DIR/vscode"
 npm run compile
 
 if [ "$TARGET" = "universal" ] || [ "$TARGET" = "none" ]; then
-    npx @vscode/vsce package --no-dependencies
+    npx @vscode/vsce package
 else
-    npx @vscode/vsce package --no-dependencies --target "$TARGET"
+    npx @vscode/vsce package --target "$TARGET"
 fi
 
 echo "=== Extension packaged successfully for $TARGET ==="

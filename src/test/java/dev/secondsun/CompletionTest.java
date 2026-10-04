@@ -95,8 +95,9 @@ public class CompletionTest {
   public void testIncludeCompletionLineOutOfBounds() {
     var includeFeature = new dev.secondsun.retrolsp.feature.IncludeCompletionFeature();
     var fileContent = new CA65Scanner().tokenize(".include \"lib\"\n");
-    // File has 1 line (index 0). Request is for line 1.
-    var result = includeFeature.handle(documentPositionParams(1, 0), fileContent);
+    // Request is for line index equal to textLines() (out of bounds).
+    var result =
+        includeFeature.handle(documentPositionParams(fileContent.textLines(), 0), fileContent);
     org.junit.jupiter.api.Assertions.assertTrue(result.isEmpty());
   }
 

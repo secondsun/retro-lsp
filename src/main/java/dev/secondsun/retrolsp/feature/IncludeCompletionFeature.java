@@ -37,63 +37,91 @@ public class IncludeCompletionFeature implements CompletionFeature {
   public Optional<CompletionList> handle(
       TextDocumentPositionParams params, TokenizedFile fileContent) {
 
-    if (fileContent == null || fileContent.textLines() < params.position.line) {
+    if (fileContent == null
+        || params.position.line < 0
+        || params.position.line >= fileContent.textLines()) {
       return Optional.empty();
     }
 
     CompletionList list = new CompletionList();
     list.items = new ArrayList<>();
     var line = fileContent.getLineText(params.position.line);
-    var stringLeftOfCursor =
-        line.substring(
-            0,
-            params
-                .position
-                .character); // I think that you can't replace the string before the cursor
+    int col = Math.max(0, Math.min(params.position.character, line.length()));
+    var stringLeftOfCursor = line.substring(0, col);
 
     var filePrefix = getPrefix(stringLeftOfCursor);
 
-    var parentDir = new File(params.textDocument.uri).getParentFile();
-    if (Util.isIncludeDirective(line)) {
-      for (File file : parentDir.listFiles(File::isDirectory)) {
-        if (!file.getName().startsWith(filePrefix)) {
-          continue;
+    File parentDir = null;
+    try {
+      if (params.textDocument != null && params.textDocument.uri != null) {
+        var uri = params.textDocument.uri;
+        if ("file".equalsIgnoreCase(uri.getScheme())) {
+          parentDir = new File(uri.getPath()).getParentFile();
+        } else {
+          parentDir = new File(uri).getParentFile();
         }
-
-        String replacement =
-            Util.trimCompletion(stringLeftOfCursor, ".include \"" + file.getName() + "\"");
-
-        var item = new CompletionItem();
-        item.kind = CompletionItemKind.Folder;
-        item.label = file.getName() + "/";
-        item.textEdit =
-            new TextEdit(
-                new Range(
-                    new Position(params.position.line, params.position.character),
-                    new Position(params.position.line, line.length())),
-                replacement);
-
-        list.items.add(item);
       }
-      for (File file : parentDir.listFiles(File::isFile)) {
-        if (!file.getName().startsWith(filePrefix)) {
-          continue;
+    } catch (Exception ignore) {
+    }
+
+    if (Util.isIncludeDirective(line)) {
+      int endCol = col;
+      while (endCol < line.length()
+          && (Character.isLetterOrDigit(line.charAt(endCol))
+              || line.charAt(endCol) == '.'
+              || line.charAt(endCol) == '_')) {
+        endCol++;
+      }
+      if (endCol < line.length() && line.charAt(endCol) == '"') {
+        endCol++;
+      }
+
+      var dirFiles = parentDir != null ? parentDir.listFiles(File::isDirectory) : null;
+      if (dirFiles != null) {
+        for (File file : dirFiles) {
+          if (!file.getName().startsWith(filePrefix)) {
+            continue;
+          }
+
+          String replacement =
+              Util.trimCompletion(stringLeftOfCursor, ".include \"" + file.getName() + "\"");
+
+          var item = new CompletionItem();
+          item.kind = CompletionItemKind.Folder;
+          item.label = file.getName() + "/";
+          item.textEdit =
+              new TextEdit(
+                  new Range(
+                      new Position(params.position.line, col),
+                      new Position(params.position.line, endCol)),
+                  replacement);
+
+          list.items.add(item);
         }
+      }
 
-        String replacement =
-            Util.trimCompletion(stringLeftOfCursor, ".include \"" + file.getName() + "\"");
+      var regularFiles = parentDir != null ? parentDir.listFiles(File::isFile) : null;
+      if (regularFiles != null) {
+        for (File file : regularFiles) {
+          if (!file.getName().startsWith(filePrefix)) {
+            continue;
+          }
 
-        var item = new CompletionItem();
-        item.kind = CompletionItemKind.File;
-        item.label = file.getName();
-        item.textEdit =
-            new TextEdit(
-                new Range(
-                    new Position(params.position.line, params.position.character),
-                    new Position(params.position.line, line.length())),
-                replacement);
+          String replacement =
+              Util.trimCompletion(stringLeftOfCursor, ".include \"" + file.getName() + "\"");
 
-        list.items.add(item);
+          var item = new CompletionItem();
+          item.kind = CompletionItemKind.File;
+          item.label = file.getName();
+          item.textEdit =
+              new TextEdit(
+                  new Range(
+                      new Position(params.position.line, col),
+                      new Position(params.position.line, endCol)),
+                  replacement);
+
+          list.items.add(item);
+        }
       }
     }
     return Optional.of(list);
@@ -110,8 +138,14 @@ public class IncludeCompletionFeature implements CompletionFeature {
 
   @Override
   public boolean canComplete(TextDocumentPositionParams params, TokenizedFile fileContent) {
-    var line = fileContent.getLineText(params.position.line).trim();
-    var leftOfCursor = line.substring(0, params.position.character).trim();
+    if (fileContent == null
+        || params.position.line < 0
+        || params.position.line >= fileContent.textLines()) {
+      return false;
+    }
+    var line = fileContent.getLineText(params.position.line);
+    int col = Math.max(0, Math.min(params.position.character, line.length()));
+    var leftOfCursor = line.substring(0, col).stripLeading();
     return leftOfCursor.toUpperCase().startsWith(".INCLUDE");
   }
 }

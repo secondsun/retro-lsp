@@ -82,6 +82,55 @@ public class CompletionTest {
     }
   }
 
+  @Test
+  public void testIncludeCompletionWithIndentation() {
+    var includeFeature = new dev.secondsun.retrolsp.feature.IncludeCompletionFeature();
+    var fileContent = new CA65Scanner().tokenize("    .include \"lib\"\n");
+    // Indented line: 4 spaces followed by .include "lib". Cursor at column 17.
+    boolean canComplete = includeFeature.canComplete(documentPositionParams(0, 17), fileContent);
+    org.junit.jupiter.api.Assertions.assertTrue(canComplete);
+  }
+
+  @Test
+  public void testIncludeCompletionLineOutOfBounds() {
+    var includeFeature = new dev.secondsun.retrolsp.feature.IncludeCompletionFeature();
+    var fileContent = new CA65Scanner().tokenize(".include \"lib\"\n");
+    // File has 1 line (index 0). Request is for line 1.
+    var result = includeFeature.handle(documentPositionParams(1, 0), fileContent);
+    org.junit.jupiter.api.Assertions.assertTrue(result.isEmpty());
+  }
+
+  @Test
+  public void testIncludeCompletionNonExistentDirectory() {
+    var includeFeature = new dev.secondsun.retrolsp.feature.IncludeCompletionFeature();
+    var fileContent = new CA65Scanner().tokenize(".include \"\n");
+    var params =
+        new TextDocumentPositionParams(
+            new TextDocumentIdentifier(URI.create("file:///non/existent/path/test.s")),
+            new Position(0, 10));
+    var result = includeFeature.handle(params, fileContent);
+    org.junit.jupiter.api.Assertions.assertTrue(result.isPresent());
+  }
+
+  @Test
+  public void testIncludeCompletionPreservesTrailingComment() throws java.io.IOException {
+    var includeFeature = new dev.secondsun.retrolsp.feature.IncludeCompletionFeature();
+    var fileContent = new CA65Scanner().tokenize(".include \"test\" ; keep this comment\n");
+    var testFile = TestUtils.getTestFile("test.sgs");
+    var params =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(testFile), new Position(0, 14));
+    var result = includeFeature.handle(params, fileContent);
+    org.junit.jupiter.api.Assertions.assertTrue(result.isPresent());
+    var items = result.get().items;
+    org.junit.jupiter.api.Assertions.assertFalse(items.isEmpty());
+    for (var item : items) {
+      org.junit.jupiter.api.Assertions.assertNotEquals(
+          fileContent.getLineText(0).length(),
+          item.textEdit.range.end.character,
+          "TextEdit should not erase the rest of the line");
+    }
+  }
+
   private static TextDocumentPositionParams documentPositionParams(int line, int column) {
     final URI filepath = URI.create("file://bar/foo/baz.s");
     return new TextDocumentPositionParams(

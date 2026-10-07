@@ -25,8 +25,8 @@ A healthy build completes in under 10 seconds and concludes with:
 ### Step 1: Java Unit Tests (`./mvnw test`)
 * **What it does**: Executes all JUnit 5 tests against `CA65LanguageServer` and feature handlers.
 * **Common Failure**: `NoClassDefFoundError: dev/secondsun/retro/util/Location`
-  * **Cause**: `Location` was moved to `dev.secondsun.retro.util.vo.Location` in `retro-common:1.2.7`.
-  * **Fix**: Ensure `sfx-optimizer` is built against `retro-common:1.2.7` and all references import `dev.secondsun.retro.util.vo.Location`.
+  * **Cause**: `Location` was moved to `dev.secondsun.retro.util.vo.Location` in `retro-common:1.5.0`.
+  * **Fix**: Ensure dependencies are built against `retro-common:1.5.0` and all references import `dev.secondsun.retro.util.vo.Location`.
 
 ### Step 2: JLink Native Packaging (`./scripts/link_linux.sh`)
 * **What it does**: Uses JDK's `jlink` to build a self-contained runtime into `dist/linux/bin/launcher`.

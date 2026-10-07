@@ -21,6 +21,7 @@ import dev.secondsun.retrolsp.feature.Feature;
 import dev.secondsun.retrolsp.feature.GoToDefinitionLinkFeature;
 import dev.secondsun.retrolsp.feature.HoverFeature;
 import dev.secondsun.retrolsp.feature.IncludeCompletionFeature;
+import dev.secondsun.retrolsp.feature.SymbolCompletionFeature;
 import dev.secondsun.sfxoptimizer.graphnode.*;
 import java.net.URI;
 import java.nio.file.Path;
@@ -47,6 +48,7 @@ public class CA65LanguageServer extends LanguageServer {
   private final List<Feature<?, ?>> features = new ArrayList<>();
   private IncludeCompletionFeature includeCompletionFeature;
   private DirectiveCompletionFeature commandCompletionFeature;
+  private SymbolCompletionFeature symbolCompletionFeature;
   private Path libSFXRoot;
   private SymbolService symbolService;
   private ProjectService projectService;
@@ -72,12 +74,14 @@ public class CA65LanguageServer extends LanguageServer {
       this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature(this.symbolService);
       this.includeCompletionFeature = new IncludeCompletionFeature();
       this.commandCompletionFeature = new DirectiveCompletionFeature();
+      this.symbolCompletionFeature = new SymbolCompletionFeature(this.symbolService);
 
       features.add(includeCompletionFeature);
       features.add(gotoDefinitionLinkFeature);
       features.add(hoverFeature);
       features.add(documentLinkFeature);
       features.add(commandCompletionFeature);
+      features.add(symbolCompletionFeature);
 
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -140,18 +144,21 @@ public class CA65LanguageServer extends LanguageServer {
   @Override
   public Optional<CompletionList> completion(TextDocumentPositionParams params) {
     var file = projectService.getFileContents(params.textDocument.uri);
-    var feature =
-        features.stream()
-            .filter(
-                feature2 ->
-                    feature2 instanceof CompletionFeature
-                        && ((CompletionFeature) feature2).canComplete(params, file))
-            .findFirst();
-    if (feature.isEmpty()) {
-      return Optional.empty();
-    } else {
-      return ((CompletionFeature) feature.get()).handle(params, file);
+    List<dev.secondsun.lsp.CompletionItem> allItems = new ArrayList<>();
+    for (var feature2 : features) {
+      if (feature2 instanceof CompletionFeature cf && cf.canComplete(params, file)) {
+        var res = cf.handle(params, file);
+        if (res.isPresent() && res.get().items != null) {
+          allItems.addAll(res.get().items);
+        }
+      }
     }
+    if (allItems.isEmpty()) {
+      return Optional.empty();
+    }
+    var list = new CompletionList();
+    list.items = allItems;
+    return Optional.of(list);
   }
 
   @Override

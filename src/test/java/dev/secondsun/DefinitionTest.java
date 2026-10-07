@@ -63,4 +63,125 @@ public class DefinitionTest {
     assertEquals(targetUri, locations.get(0).uri);
     assertEquals(5, locations.get(0).range.start.line);
   }
+
+  @Test
+  public void testGoToDefinitionLocalLabelsInScopedFunctions() {
+    var uri = URI.create("file:///test.s");
+    var scanner = new CA65Scanner();
+    var src =
+        """
+        function func1
+        @loop:
+            bra @loop
+        endfunction
+        function func2
+        @loop:
+            bra @loop
+        endfunction
+        """;
+    var fileContent = scanner.tokenize(src);
+    fileContent.uri = uri;
+    var symbolService = new SymbolService();
+    symbolService.extractDefinitions(fileContent);
+
+    var feature = new GoToDefinitionLinkFeature(symbolService);
+
+    // func1's @loop at line 2, character 9
+    var params1 =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(2, 9));
+    var res1 = feature.handle(params1, fileContent);
+    assertNotNull(res1);
+    assertTrue(res1.isPresent());
+    assertEquals(1, res1.get().get(0).range.start.line);
+
+    // func2's @loop at line 6, character 9
+    var params2 =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(6, 9));
+    var res2 = feature.handle(params2, fileContent);
+    assertNotNull(res2);
+    assertTrue(res2.isPresent());
+    assertEquals(5, res2.get().get(0).range.start.line);
+  }
+
+  @Test
+  public void testGoToDefinitionFunctionParametersAndReturnVariables() {
+    var uri = URI.create("file:///test.s");
+    var scanner = new CA65Scanner();
+    var src =
+        """
+        function calculate param1, param2 : result
+            lda param1
+            sta result
+            return result
+        endfunction
+        """;
+    var fileContent = scanner.tokenize(src);
+    fileContent.uri = uri;
+    var symbolService = new SymbolService();
+    symbolService.extractDefinitions(fileContent);
+
+    var feature = new GoToDefinitionLinkFeature(symbolService);
+
+    // param1 at line 1, col 9
+    var params1 =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(1, 9));
+    var res1 = feature.handle(params1, fileContent);
+    assertNotNull(res1);
+    assertTrue(res1.isPresent());
+    assertEquals(0, res1.get().get(0).range.start.line);
+
+    // result at line 2, col 9
+    var params2 =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(2, 9));
+    var res2 = feature.handle(params2, fileContent);
+    assertNotNull(res2);
+    assertTrue(res2.isPresent());
+    assertEquals(0, res2.get().get(0).range.start.line);
+  }
+
+  @Test
+  public void testGoToDefinitionQualifiedSymbolAndStructFields() {
+    var uri = URI.create("file:///test.s");
+    var scanner = new CA65Scanner();
+    var src =
+        """
+        .struct Point
+            coordX .word
+            coordY .word
+        .endstruct
+            lda Point::coordX
+            jsr ::globalFunc
+        """;
+    var fileContent = scanner.tokenize(src);
+    fileContent.uri = uri;
+    var symbolService = new SymbolService();
+    symbolService.extractDefinitions(fileContent);
+    symbolService.addDefinition("globalFunc", new Location(uri, 10, 0, 10));
+
+    var feature = new GoToDefinitionLinkFeature(symbolService);
+
+    // Point::coordX on "::" at line 4, col 13
+    var params1 =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(4, 13));
+    var res1 = feature.handle(params1, fileContent);
+    assertNotNull(res1);
+    assertTrue(res1.isPresent());
+    assertEquals(1, res1.get().get(0).range.start.line);
+
+    // Point::coordX on member at line 4, col 16
+    var params2 =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(4, 16));
+    var res2 = feature.handle(params2, fileContent);
+    assertNotNull(res2);
+    assertTrue(res2.isPresent());
+    assertEquals(1, res2.get().get(0).range.start.line);
+
+    // ::globalFunc on "::" at line 5, col 9
+    var params3 =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(5, 9));
+    var res3 = feature.handle(params3, fileContent);
+    assertNotNull(res3);
+    assertTrue(res3.isPresent());
+    assertEquals(10, res3.get().get(0).range.start.line);
+  }
 }

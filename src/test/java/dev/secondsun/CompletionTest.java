@@ -132,6 +132,73 @@ public class CompletionTest {
     }
   }
 
+  @Test
+  public void testPseudoMacroCompletion() {
+    var symbolService = new dev.secondsun.retro.util.SymbolService();
+    var feature = new dev.secondsun.retrolsp.feature.SymbolCompletionFeature(symbolService);
+
+    var fileContent = new CA65Scanner().tokenize("    func\n");
+    var params = documentPositionParams(0, 8);
+    var result = feature.handle(params, fileContent);
+
+    org.junit.jupiter.api.Assertions.assertTrue(result.isPresent());
+    var labels = result.get().items.stream().map(it -> it.label).toList();
+    org.junit.jupiter.api.Assertions.assertTrue(labels.contains("function"));
+
+    // Complete "ca" -> "call"
+    var fileCall = new CA65Scanner().tokenize("    ca\n");
+    var resCall = feature.handle(documentPositionParams(0, 6), fileCall);
+    org.junit.jupiter.api.Assertions.assertTrue(resCall.isPresent());
+    var callLabels = resCall.get().items.stream().map(it -> it.label).toList();
+    org.junit.jupiter.api.Assertions.assertTrue(callLabels.contains("call"));
+
+    // Complete "ret" -> "return"
+    var fileRet = new CA65Scanner().tokenize("    ret\n");
+    var resRet = feature.handle(documentPositionParams(0, 7), fileRet);
+    org.junit.jupiter.api.Assertions.assertTrue(resRet.isPresent());
+    var retLabels = resRet.get().items.stream().map(it -> it.label).toList();
+    org.junit.jupiter.api.Assertions.assertTrue(retLabels.contains("return"));
+
+    // Complete "endf" -> "endfunction"
+    var fileEndf = new CA65Scanner().tokenize("    endf\n");
+    var resEndf = feature.handle(documentPositionParams(0, 8), fileEndf);
+    org.junit.jupiter.api.Assertions.assertTrue(resEndf.isPresent());
+    var endfLabels = resEndf.get().items.stream().map(it -> it.label).toList();
+    org.junit.jupiter.api.Assertions.assertTrue(endfLabels.contains("endfunction"));
+  }
+
+  @Test
+  public void testScopeAwareSymbolCompletion() {
+    var uri = URI.create("file:///test.s");
+    var scanner = new CA65Scanner();
+    var src =
+        """
+        globalVar = $1234
+        function myFunc param1 : retVal
+        localVar = $5678
+            lda\s
+        endfunction
+        """;
+    var fileContent = scanner.tokenize(src);
+    fileContent.uri = uri;
+    var symbolService = new dev.secondsun.retro.util.SymbolService();
+    symbolService.extractDefinitions(fileContent);
+
+    var feature = new dev.secondsun.retrolsp.feature.SymbolCompletionFeature(symbolService);
+
+    // Inside myFunc (line 3, col 8)
+    var params =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(3, 8));
+    var result = feature.handle(params, fileContent);
+
+    org.junit.jupiter.api.Assertions.assertTrue(result.isPresent());
+    var labels = result.get().items.stream().map(it -> it.label).toList();
+    org.junit.jupiter.api.Assertions.assertTrue(labels.contains("param1"));
+    org.junit.jupiter.api.Assertions.assertTrue(labels.contains("retVal"));
+    org.junit.jupiter.api.Assertions.assertTrue(labels.contains("localVar"));
+    org.junit.jupiter.api.Assertions.assertTrue(labels.contains("globalVar"));
+  }
+
   private static TextDocumentPositionParams documentPositionParams(int line, int column) {
     final URI filepath = URI.create("file://bar/foo/baz.s");
     return new TextDocumentPositionParams(

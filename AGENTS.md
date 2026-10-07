@@ -14,7 +14,7 @@ The repository contains two coupled subsystems:
    - Language: Java 26 (Oracle / OpenJDK)
    - Build Tool: Maven (use `./mvnw`)
    - Module: `dev.secondsun.retrolsp` (defined in `src/main/java/module-info.java`)
-   - Core dependencies: `dev.secondsun:retro-common:1.2.7`, `dev.secondsun:sfx-optimizer:0.2`, `com.google.code.gson:gson`, `dev.secondsun:languageserver:0.8`.
+   - Core dependencies: `dev.secondsun:retro-common:1.5.0`, `dev.secondsun:sfx-optimizer:0.3`, `com.google.code.gson:gson`, `dev.secondsun:languageserver:0.11.0`.
    - Native Image / Distribution: Built via `jlink` into `dist/<platform>/bin/launcher`.
 2. **VS Code Extension Client** (`vscode/` directory):
    - Language: TypeScript 5.7+ (Node 24 runtime, Node16 module resolution)
@@ -52,8 +52,8 @@ When modifying or refactoring this repository, you MUST respect these invariants
    - The Java module name is `dev.secondsun.retrolsp`.
    - Never revert launcher commands or module descriptors to the legacy `dev.secondsun.tm4e4lsp`.
 2. **Location Package**:
-   - `Location` in `retro-common:1.2.7` is located at `dev.secondsun.retro.util.vo.Location`.
-   - Do not import `dev.secondsun.retro.util.Location` (deprecated/removed in 1.2.7).
+   - `Location` in `retro-common:1.5.0` is located at `dev.secondsun.retro.util.vo.Location`.
+   - Do not import `dev.secondsun.retro.util.Location` (deprecated/removed in 1.2.7/1.5.0).
    - In LSP feature code (e.g. `GoToDefinitionLinkFeature`), distinguish between the common value object (`dev.secondsun.retro.util.vo.Location`) and the LSP protocol DTO (`dev.secondsun.lsp.Location`).
 3. **Hermetic Packaging**:
    - Before running `jlink`, ensure `target/dependency` is cleanly generated (e.g. via `mvn clean package`). Multiple jar versions of the same module in `target/dependency` will cause `jlink` to abort.

@@ -155,4 +155,123 @@ public class HoverTest {
     assertNotNull(result);
     assertTrue(result.isPresent());
   }
+
+  @Test
+  public void testHoverDisplaysDocComments() {
+    var uri = URI.create("file:///test.s");
+    var scanner = new dev.secondsun.retro.util.CA65Scanner();
+    var src =
+        """
+        ; Documenting myCoolFunction
+        ; Multi-line documentation
+        function myCoolFunction param1 : result
+            return result
+        endfunction
+        """;
+    var fileContent = scanner.tokenize(src);
+    fileContent.uri = uri;
+    var fileService = new dev.secondsun.retro.util.FileService();
+    var symbolService = new dev.secondsun.retro.util.SymbolService();
+    symbolService.extractDefinitions(fileContent);
+
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+
+    // Hover on myCoolFunction at line 2, character 15
+    var params =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(2, 15));
+    var result = hoverFeature.handle(params, fileContent);
+
+    assertNotNull(result);
+    assertTrue(result.isPresent());
+    assertFalse(result.get().contents.isEmpty());
+
+    var hoverText = result.get().contents.get(0).value;
+    assertTrue(hoverText.contains("Documenting myCoolFunction"));
+    assertTrue(hoverText.contains("Multi-line documentation"));
+    assertTrue(hoverText.contains("function myCoolFunction param1 : result"));
+  }
+
+  @Test
+  public void testHoverOnFunctionDeclarationDisplaysSignature() {
+    var uri = URI.create("file:///test.s");
+    var scanner = new dev.secondsun.retro.util.CA65Scanner();
+    var src =
+        """
+        function calculateSum a, b : sum
+            return sum
+        endfunction
+        call calculateSum
+        """;
+    var fileContent = scanner.tokenize(src);
+    fileContent.uri = uri;
+    var fileService = new dev.secondsun.retro.util.FileService();
+    var symbolService = new dev.secondsun.retro.util.SymbolService();
+    symbolService.extractDefinitions(fileContent);
+
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+
+    // Hover on function name at declaration (line 0, col 12)
+    var paramsDecl =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(0, 12));
+    var resDecl = hoverFeature.handle(paramsDecl, fileContent);
+    assertNotNull(resDecl);
+    assertTrue(resDecl.isPresent());
+    assertFalse(resDecl.get().contents.isEmpty());
+    assertTrue(resDecl.get().contents.get(0).value.contains("function calculateSum a, b : sum"));
+
+    // Hover on function name at call site (line 3, col 7)
+    var paramsCall =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(3, 7));
+    var resCall = hoverFeature.handle(paramsCall, fileContent);
+    assertNotNull(resCall);
+    assertTrue(resCall.isPresent());
+    assertFalse(resCall.get().contents.isEmpty());
+    assertTrue(resCall.get().contents.get(0).value.contains("function calculateSum a, b : sum"));
+  }
+
+  @Test
+  public void testHoverOnPseudoMacroKeywords() {
+    var uri = URI.create("file:///test.s");
+    var scanner = new dev.secondsun.retro.util.CA65Scanner();
+    var src =
+        """
+        function myFunc
+            call otherFunc
+            return
+        endfunction
+        """;
+    var fileContent = scanner.tokenize(src);
+    fileContent.uri = uri;
+    var fileService = new dev.secondsun.retro.util.FileService();
+    var symbolService = new dev.secondsun.retro.util.SymbolService();
+
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+
+    // Hover on "function" keyword at line 0, col 2
+    var pFunction =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(0, 2));
+    var rFunction = hoverFeature.handle(pFunction, fileContent);
+    assertTrue(rFunction.isPresent());
+    assertTrue(rFunction.get().contents.get(0).value.contains("function <name>"));
+
+    // Hover on "call" keyword at line 1, col 5
+    var pCall = new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(1, 5));
+    var rCall = hoverFeature.handle(pCall, fileContent);
+    assertTrue(rCall.isPresent());
+    assertTrue(rCall.get().contents.get(0).value.contains("call <target>"));
+
+    // Hover on "return" keyword at line 2, col 5
+    var pReturn =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(2, 5));
+    var rReturn = hoverFeature.handle(pReturn, fileContent);
+    assertTrue(rReturn.isPresent());
+    assertTrue(rReturn.get().contents.get(0).value.contains("return"));
+
+    // Hover on "endfunction" keyword at line 3, col 2
+    var pEndFunction =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(3, 2));
+    var rEndFunction = hoverFeature.handle(pEndFunction, fileContent);
+    assertTrue(rEndFunction.isPresent());
+    assertTrue(rEndFunction.get().contents.get(0).value.contains("endfunction"));
+  }
 }

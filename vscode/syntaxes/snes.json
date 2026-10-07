@@ -88,7 +88,7 @@
 			"name": "support.function.pseudo keyword.other.directive"
 		},
 		{
-			"match": "\\b(?i:function|call|return)\\b",
+			"match": "\\b(?i:function|endfunction|call|return)\\b",
 			"name": "support.function.pseudo keyword.custom.directive"
 		},
 		{

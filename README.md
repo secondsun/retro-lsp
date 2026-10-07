@@ -61,7 +61,7 @@ The extension and language server can be configured through the following settin
 
 ## Future Plans
 
-- Dynamic help text using NaturalDocs syntax in hovers
+- Dynamic help text on hovers
 - Refactoring tools (rename symbols and files)
 - Find all references / Go to usages
 - Additional autocompletion for user constants and symbols

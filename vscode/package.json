@@ -2,7 +2,7 @@
   "name": "retro-vscode",
   "displayName": "retro-vscode",
   "description": "A suite of tools for developing on the SNES with support for the SuperFX chip.",
-  "version": "0.0.3",
+  "version": "0.0.6-PROTOTYPE",
   "publisher": "secondsun",
   "license": "MIT",
   "repository": {

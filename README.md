@@ -63,7 +63,7 @@ The extension and language server can be configured through the following settin
 - **Autocomplete File Includes**: Directory and file completions when typing `.include "..."`.
 - **Control Command Completion**: Contextual autocompletion for common CA65 control commands and directives.
 - **Documentation Hovers**: Accurate subroutine signatures, doc comments, and opcode/directive documentation.
-- **Model Context Protocol (MCP) Server**: Run `launcher --mcp` to expose SuperFX static analysis tools over stdio:
+- **Model Context Protocol (MCP) Server**: Run `launcher --mcp` (or `--mcp-port=<port>`, default: `8085`) to expose SuperFX static analysis tools over HTTP (supporting both SSE at `/sse` and direct JSON-RPC POST at `/` or `/mcp`), while LSP continues to run concurrently over stdio:
   - `sfx_audit_invariants`: Audits code for 8-NOP pipeline settling before `stop`, 16-bit word alignment on `ldw`/`stw`, lack of hardware `MERGE` on FX3, and modal instruction lifetimes (`with`, `to`, `from`).
   - `sfx_expand_macro`: Expands X-GSU macros (`function`, `for`, `if_lt`, etc.) to ca65 SuperFX instructions via `CA65MacroExpander`.
   - `sfx_lookup_symbol`: Resolves symbol definitions, scope hierarchies, and doc comments extracted by `retro-common`.

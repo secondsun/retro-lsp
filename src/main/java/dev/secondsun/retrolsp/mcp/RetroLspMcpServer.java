@@ -108,6 +108,7 @@ public class RetroLspMcpServer implements AutoCloseable {
   private final SfxMacroExpanderTool macroExpander;
   private final SfxSymbolLookupTool symbolLookup;
   private final SfxRegisterAnalysisTool registerAnalysis;
+  private final ServerMcpTransport transport;
   private final McpSyncServer syncServer;
   private final CountDownLatch stopLatch;
 
@@ -122,6 +123,7 @@ public class RetroLspMcpServer implements AutoCloseable {
    * @param transport the transport to listen and serve on, or null for standalone
    */
   public RetroLspMcpServer(ServerMcpTransport transport) {
+    this.transport = transport;
     this.objectMapper = new ObjectMapper();
     this.invariantAuditor = new SfxInvariantAuditor();
     this.macroExpander = new SfxMacroExpanderTool();
@@ -181,6 +183,51 @@ public class RetroLspMcpServer implements AutoCloseable {
   }
 
   /**
+   * Creates and starts a Retro-LSP MCP server listening on HTTP at the default host and given port.
+   *
+   * @param port the port to listen on, or 0 for an ephemeral free port
+   * @return a running RetroLspMcpServer instance
+   * @throws java.io.IOException if the server fails to bind
+   */
+  public static RetroLspMcpServer createHttp(int port) throws java.io.IOException {
+    return createHttp("127.0.0.1", port);
+  }
+
+  /**
+   * Creates and starts a Retro-LSP MCP server listening on HTTP at the specified host and port.
+   *
+   * @param host the host to bind to
+   * @param port the port to listen on, or 0 for an ephemeral free port
+   * @return a running RetroLspMcpServer instance
+   * @throws java.io.IOException if the server fails to bind
+   */
+  public static RetroLspMcpServer createHttp(String host, int port) throws java.io.IOException {
+    HttpServerMcpTransport transport = new HttpServerMcpTransport(host, port);
+    return new RetroLspMcpServer(transport);
+  }
+
+  /**
+   * Returns the bound port if running over {@link HttpServerMcpTransport}, or -1 otherwise.
+   *
+   * @return the HTTP port number, or -1 if not an HTTP server
+   */
+  public int getPort() {
+    if (transport instanceof HttpServerMcpTransport httpTransport) {
+      return httpTransport.getPort();
+    }
+    return -1;
+  }
+
+  /**
+   * Returns the active {@link ServerMcpTransport}, or null if standalone.
+   *
+   * @return the transport instance
+   */
+  public ServerMcpTransport getTransport() {
+    return transport;
+  }
+
+  /**
    * Executes a tool by name with arguments and formats the result as an MCP CallToolResult.
    *
    * @param name tool name
@@ -237,6 +284,13 @@ public class RetroLspMcpServer implements AutoCloseable {
         syncServer.close();
       } catch (Exception e) {
         LOG.log(Level.FINE, "Error closing MCP sync server: " + e.getMessage(), e);
+      }
+    }
+    if (transport != null) {
+      try {
+        transport.close();
+      } catch (Exception e) {
+        LOG.log(Level.FINE, "Error closing MCP transport: " + e.getMessage(), e);
       }
     }
     stopLatch.countDown();

@@ -9,4 +9,7 @@ open module dev.secondsun.retrolsp {
   requires dev.secondsun.lsp;
   requires dev.secondsun.retro.util;
   requires dev.secondsun.sfxoptimizer;
+  requires mcp;
+  requires com.fasterxml.jackson.databind;
+  requires com.fasterxml.jackson.core;
 }

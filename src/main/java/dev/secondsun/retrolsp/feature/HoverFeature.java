@@ -13,9 +13,6 @@ import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.retro.util.*;
 import dev.secondsun.retro.util.vo.TokenizedFile;
 import dev.secondsun.retro.util.vo.Tokens;
-import dev.secondsun.sfxoptimizer.Constants;
-import dev.secondsun.sfxoptimizer.IntervalKey;
-import dev.secondsun.sfxoptimizer.graphbuilder.CA65Grapher;
 import java.net.URI;
 import java.util.*;
 import java.util.logging.Level;
@@ -31,7 +28,6 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
   private final FileService fileService;
   private final SymbolService symbolService;
   private final ProjectService projectService;
-  private final CA65Grapher grapher;
 
   /**
    * Constructs a new {@code HoverFeature} with the specified file and symbol services.
@@ -55,7 +51,6 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
     this.fileService = fileService;
     this.symbolService = symbolService;
     this.projectService = projectService;
-    this.grapher = new CA65Grapher(symbolService, fileService);
   }
 
   @Override
@@ -150,63 +145,13 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
       doc = symbolService.getDocumentation(tokenText);
     }
 
-    // 5. GSU grapher analysis (context-aware lookup)
-    String registerUsage = null;
-    var symbol = symbolService.getLocation(tokenText, docUri, line);
-    if (symbol == null) {
-      symbol = symbolService.getLocation(tokenText);
-    }
-    if (symbol != null) {
-      try {
-        TokenizedFile targetFile = null;
-        if (docUri != null && symbol.filename() != null && docUri.equals(symbol.filename())) {
-          targetFile = fileContent;
-        }
-        if (targetFile == null && projectService != null) {
-          targetFile = projectService.getFileContents(symbol.filename());
-        }
-        if (targetFile == null || targetFile == TokenizedFile.EMPTY) {
-          targetFile = fileService.readLines(symbol.filename());
-        }
-        if (targetFile != null && targetFile != TokenizedFile.EMPTY) {
-          var graph = grapher.graph(targetFile, symbol.line());
-          if (graph != null && graph.getStartNode() != null) {
-            var intervals =
-                Arrays.stream(Constants.Register.values())
-                    .map(
-                        register ->
-                            graph.getStartNode().intervals(new IntervalKey.RegisterKey(register)))
-                    .filter(Objects::nonNull)
-                    .toList();
-
-            var string = new StringBuilder(" Uses : ");
-            if (intervals.isEmpty()) {
-              string.append(" NONE");
-            } else {
-              intervals.forEach(
-                  interval -> {
-                    string.append(String.format(" %s, ", interval.getKey().toString()));
-                  });
-            }
-            registerUsage = string.toString();
-          }
-        }
-      } catch (Exception e) {
-        Logger.getAnonymousLogger()
-            .log(Level.WARNING, "Failed to analyze hover graph: " + e.getMessage(), e);
-      }
-    }
-
-    // Combine signature, doc, and register usage into hover content
+    // Combine signature and doc into hover content
     List<String> sections = new ArrayList<>();
     if (functionSignature != null) {
       sections.add("```ca65\n" + functionSignature + "\n```");
     }
     if (doc != null && !doc.isBlank()) {
       sections.add(doc.strip());
-    }
-    if (registerUsage != null && !registerUsage.isBlank()) {
-      sections.add(registerUsage.strip());
     }
 
     if (!sections.isEmpty()) {

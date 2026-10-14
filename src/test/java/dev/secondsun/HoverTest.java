@@ -71,6 +71,8 @@ public class HoverTest {
     Hover functionHover = (hoverResult.get());
 
     assertEquals(1, functionHover.contents.size());
+    String content = functionHover.contents.get(0).value;
+    assertFalse(content.contains("Uses :"));
   }
 
   @Test
@@ -189,6 +191,7 @@ public class HoverTest {
     assertTrue(hoverText.contains("Documenting myCoolFunction"));
     assertTrue(hoverText.contains("Multi-line documentation"));
     assertTrue(hoverText.contains("function myCoolFunction param1 : result"));
+    assertFalse(hoverText.contains("Uses :"));
   }
 
   @Test
@@ -218,6 +221,7 @@ public class HoverTest {
     assertTrue(resDecl.isPresent());
     assertFalse(resDecl.get().contents.isEmpty());
     assertTrue(resDecl.get().contents.get(0).value.contains("function calculateSum a, b : sum"));
+    assertFalse(resDecl.get().contents.get(0).value.contains("Uses :"));
 
     // Hover on function name at call site (line 3, col 7)
     var paramsCall =
@@ -227,6 +231,7 @@ public class HoverTest {
     assertTrue(resCall.isPresent());
     assertFalse(resCall.get().contents.isEmpty());
     assertTrue(resCall.get().contents.get(0).value.contains("function calculateSum a, b : sum"));
+    assertFalse(resCall.get().contents.get(0).value.contains("Uses :"));
   }
 
   @Test

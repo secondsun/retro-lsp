@@ -13,6 +13,9 @@ import {
     TransportKind,
     RevealOutputChannelOn
 } from 'vscode-languageclient/node';
+import { buildServerArgs, resolveEnableMcp } from './serverConfig.js';
+
+export { buildServerArgs, resolveEnableMcp } from './serverConfig.js';
 
 let client: LanguageClient | undefined;
 
@@ -60,9 +63,30 @@ function getLauncherPath(context: ExtensionContext): string | undefined {
     return undefined;
 }
 
-export function activate(context: ExtensionContext) {
-    console.log('Activating retroca65');
+export function buildServerOptions(
+    launcher: string,
+    extensionPath: string,
+    enableMcp: boolean = false
+): ServerOptions {
+    const args = buildServerArgs(enableMcp);
 
+    return {
+        run: {
+            command: launcher,
+            transport: TransportKind.stdio,
+            args,
+            options: { cwd: extensionPath, shell: true }
+        },
+        debug: {
+            command: launcher,
+            transport: TransportKind.stdio,
+            args,
+            options: { cwd: extensionPath, shell: true }
+        }
+    };
+}
+
+export async function startServer(context: ExtensionContext, mcpOverride?: boolean): Promise<void> {
     const launcher = getLauncherPath(context);
     if (!launcher) {
         const errorMsg = 'retroca65 Language Server binary was not found. Please verify the extension installation or configure "retroca65.serverPath" in settings.';
@@ -83,7 +107,11 @@ export function activate(context: ExtensionContext) {
         }
     }
 
-    console.log(`retroca65 launcher path: ${launcher}`);
+    const config = workspace.getConfiguration('retroca65');
+    const configuredEnableMcp = config.get<boolean>('enableMcp', false);
+    const enableMcp = resolveEnableMcp(configuredEnableMcp, mcpOverride);
+
+    console.log(`retroca65 launcher path: ${launcher} (enableMcp: ${enableMcp})`);
 
     const clientOptions: LanguageClientOptions = {
         documentSelector: [{ scheme: 'file', language: 'retroca65' }],
@@ -97,30 +125,63 @@ export function activate(context: ExtensionContext) {
                 workspace.createFileSystemWatcher('**/*.sgs')
             ]
         },
-        outputChannelName: 'retroca65',
+        outputChannelName: enableMcp ? 'retroca65 (MCP)' : 'retroca65',
         revealOutputChannelOn: RevealOutputChannelOn.Info
     };
 
-    const serverOptions: ServerOptions = {
-        run: {
-            command: launcher,
-            transport: TransportKind.stdio,
-            options: { cwd: context.extensionPath, shell: true }
-        },
-        debug: {
-            command: launcher,
-            transport: TransportKind.stdio,
-            options: { cwd: context.extensionPath, shell: true }
-        }
-    };
+    const serverOptions = buildServerOptions(launcher, context.extensionPath, enableMcp);
 
-    client = new LanguageClient('retroca65', 'retroca65 Language Server', serverOptions, clientOptions);
+    client = new LanguageClient(
+        'retroca65',
+        enableMcp ? 'retroca65 Language Server (MCP)' : 'retroca65 Language Server',
+        serverOptions,
+        clientOptions
+    );
+
     try {
-        client.start();
+        await client.start();
         context.subscriptions.push(client);
     } catch (error) {
         console.error('Failed to start retroca65 Language Client:', error);
     }
+}
+
+export async function restartServer(context: ExtensionContext, mcpOverride?: boolean): Promise<void> {
+    if (client) {
+        try {
+            await client.stop();
+        } catch (error) {
+            console.error('Failed to stop retroca65 Language Client during restart:', error);
+        }
+        client = undefined;
+    }
+    await startServer(context, mcpOverride);
+}
+
+export function activate(context: ExtensionContext) {
+    console.log('Activating retroca65');
+
+    context.subscriptions.push(
+        commands.registerCommand('retroca65.restartServer', async () => {
+            window.showInformationMessage('Restarting retroca65 language server...');
+            await restartServer(context);
+        })
+    );
+
+    context.subscriptions.push(
+        commands.registerCommand('retroca65.restartServerWithMcp', async () => {
+            try {
+                const config = workspace.getConfiguration('retroca65');
+                await config.update('enableMcp', true);
+            } catch (err) {
+                console.warn('Failed to persist retroca65.enableMcp setting:', err);
+            }
+            window.showInformationMessage('Restarting retroca65 language server with MCP enabled...');
+            await restartServer(context, true);
+        })
+    );
+
+    startServer(context);
 }
 
 export function deactivate(): Thenable<void> | undefined {
@@ -128,4 +189,8 @@ export function deactivate(): Thenable<void> | undefined {
         return undefined;
     }
     return client.stop();
+}
+
+export function getClient(): LanguageClient | undefined {
+    return client;
 }

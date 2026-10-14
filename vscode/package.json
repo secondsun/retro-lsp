@@ -16,7 +16,9 @@
     "Programming Languages"
   ],
   "activationEvents": [
-    "onLanguage:retroca65"
+    "onLanguage:retroca65",
+    "onCommand:retroca65.restartServer",
+    "onCommand:retroca65.restartServerWithMcp"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -42,6 +44,16 @@
         "path": "./syntaxes/snes.json"
       }
     ],
+    "commands": [
+      {
+        "command": "retroca65.restartServer",
+        "title": "RetroCA65: Restart Server"
+      },
+      {
+        "command": "retroca65.restartServerWithMcp",
+        "title": "RetroCA65: Restart Server with MCP"
+      }
+    ],
     "configuration": {
       "title": "retroca65 configuration",
       "properties": {
@@ -50,6 +62,12 @@
           "type": "string",
           "default": "",
           "description": "Path to the retro-lsp launcher executable or script. If not set, defaults to project dist directory."
+        },
+        "retroca65.enableMcp": {
+          "scope": "window",
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Model Context Protocol (MCP) mode on server launch"
         },
         "retroca65.trace.server": {
           "scope": "window",
@@ -83,6 +101,7 @@
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
     "pretest": "npm run compile && npm run lint",
+    "test:unit": "mocha out/test/unit/**/*.test.js",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
   },

@@ -158,7 +158,7 @@ public class RetroLspMcpServer implements AutoCloseable {
 
       this.syncServer =
           McpServer.sync(transport)
-              .serverInfo("retro-lsp", "0.0.6-PROTOTYPE")
+              .serverInfo("retro-lsp", "0.1.0-PROTOTYPE")
               .capabilities(capabilities)
               .tool(auditTool, args -> executeTool("sfx_audit_invariants", args))
               .tool(expandTool, args -> executeTool("sfx_expand_macro", args))

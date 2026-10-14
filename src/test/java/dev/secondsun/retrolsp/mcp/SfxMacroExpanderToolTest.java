@@ -46,7 +46,10 @@ public class SfxMacroExpanderToolTest {
     MacroExpandResult result = tool.expand(code);
     assertNotNull(result);
     // for expands with loop register setup / backuploop
-    assertTrue(result.expandedCode().contains("r12") || result.expandedCode().contains("r13") || result.expandedCode().contains("loop"));
+    assertTrue(
+        result.expandedCode().contains("r12")
+            || result.expandedCode().contains("r13")
+            || result.expandedCode().contains("loop"));
   }
 
   @Test

@@ -72,9 +72,10 @@ public class SfxInvariantAuditorTest {
         """;
     AuditResult result = auditor.audit(code);
     assertFalse(result.valid());
-    var v = result.violations().stream()
-        .filter(violation -> violation.rule().equals("PIPELINE_SETTLING_8_NOP"))
-        .findFirst();
+    var v =
+        result.violations().stream()
+            .filter(violation -> violation.rule().equals("PIPELINE_SETTLING_8_NOP"))
+            .findFirst();
     assertTrue(v.isPresent());
     assertTrue(v.get().message().contains("1 NOPs"));
   }
@@ -89,9 +90,10 @@ public class SfxInvariantAuditorTest {
         """;
     AuditResult result = auditor.audit(code);
     assertFalse(result.valid());
-    var v = result.violations().stream()
-        .filter(violation -> violation.rule().equals("NO_HARDWARE_MERGE"))
-        .findFirst();
+    var v =
+        result.violations().stream()
+            .filter(violation -> violation.rule().equals("NO_HARDWARE_MERGE"))
+            .findFirst();
     assertTrue(v.isPresent());
     assertEquals(2, v.get().line());
     assertEquals(Severity.ERROR, v.get().severity());
@@ -108,9 +110,10 @@ public class SfxInvariantAuditorTest {
         stw 0, r1
         """;
     AuditResult result = auditor.audit(code);
-    var wordViolations = result.violations().stream()
-        .filter(v -> v.rule().equals("WORD_ALIGNMENT_LDW_STW"))
-        .toList();
+    var wordViolations =
+        result.violations().stream()
+            .filter(v -> v.rule().equals("WORD_ALIGNMENT_LDW_STW"))
+            .toList();
     assertTrue(wordViolations.isEmpty());
   }
 
@@ -123,9 +126,10 @@ public class SfxInvariantAuditorTest {
         ldw 1235
         """;
     AuditResult result = auditor.audit(code);
-    var wordViolations = result.violations().stream()
-        .filter(v -> v.rule().equals("WORD_ALIGNMENT_LDW_STW"))
-        .toList();
+    var wordViolations =
+        result.violations().stream()
+            .filter(v -> v.rule().equals("WORD_ALIGNMENT_LDW_STW"))
+            .toList();
     assertEquals(3, wordViolations.size());
     for (var v : wordViolations) {
       assertEquals("WORD_ALIGNMENT_LDW_STW", v.rule());
@@ -142,9 +146,10 @@ public class SfxInvariantAuditorTest {
         add #2
         """;
     AuditResult result = auditor.audit(code);
-    var v = result.violations().stream()
-        .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
-        .findFirst();
+    var v =
+        result.violations().stream()
+            .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
+            .findFirst();
     assertTrue(v.isPresent());
     assertEquals(Severity.WARNING, v.get().severity());
     assertEquals(1, v.get().line());
@@ -158,9 +163,10 @@ public class SfxInvariantAuditorTest {
         to r1
         """;
     AuditResult result = auditor.audit(code);
-    var v = result.violations().stream()
-        .filter(violation -> violation.rule().equals("DANGLING_MODAL_PREFIX"))
-        .findFirst();
+    var v =
+        result.violations().stream()
+            .filter(violation -> violation.rule().equals("DANGLING_MODAL_PREFIX"))
+            .findFirst();
     assertTrue(v.isPresent());
     assertEquals(Severity.ERROR, v.get().severity());
     assertEquals(2, v.get().line());
@@ -175,9 +181,10 @@ public class SfxInvariantAuditorTest {
         nop
         """;
     AuditResult result = auditor.audit(code);
-    var v = result.violations().stream()
-        .filter(violation -> violation.rule().equals("DANGLING_MODAL_PREFIX"))
-        .findFirst();
+    var v =
+        result.violations().stream()
+            .filter(violation -> violation.rule().equals("DANGLING_MODAL_PREFIX"))
+            .findFirst();
     assertTrue(v.isPresent());
     assertEquals(Severity.ERROR, v.get().severity());
   }

@@ -9,25 +9,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Static analysis tool that resolves symbol definitions, scopes, and documentation
- * in CA65/X-GSU assembly using SymbolService.
+ * Static analysis tool that resolves symbol definitions, scopes, and documentation in CA65/X-GSU
+ * assembly using SymbolService.
  */
 public class SfxSymbolLookupTool {
 
-  public record SymbolLocation(
-      String uri,
-      int line,
-      int startIndex,
-      int endIndex
-  ) {
+  public record SymbolLocation(String uri, int line, int startIndex, int endIndex) {
     public static SymbolLocation from(Location loc) {
       if (loc == null) return null;
       return new SymbolLocation(
           loc.filename() != null ? loc.filename().toString() : null,
           loc.line(),
           loc.startIndex(),
-          loc.endIndex()
-      );
+          loc.endIndex());
     }
   }
 
@@ -37,8 +31,7 @@ public class SfxSymbolLookupTool {
       SymbolLocation location,
       String documentation,
       String scope,
-      List<SymbolLocation> allLocations
-  ) {}
+      List<SymbolLocation> allLocations) {}
 
   public SymbolLookupResult lookup(String symbol, String code, String uriStr, Integer line) {
     if (symbol == null || symbol.isBlank()) {
@@ -85,12 +78,6 @@ public class SfxSymbolLookupTool {
 
     boolean found = (loc != null || (doc != null && !doc.isBlank()) || !allLocations.isEmpty());
     return new SymbolLookupResult(
-        symbol,
-        found,
-        SymbolLocation.from(loc),
-        doc,
-        scopeName,
-        allLocations
-    );
+        symbol, found, SymbolLocation.from(loc), doc, scopeName, allLocations);
   }
 }

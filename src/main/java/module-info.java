@@ -12,4 +12,5 @@ open module dev.secondsun.retrolsp {
   requires mcp;
   requires com.fasterxml.jackson.databind;
   requires com.fasterxml.jackson.core;
+  requires org.slf4j;
 }

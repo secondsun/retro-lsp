@@ -1,6 +1,5 @@
 package dev.secondsun.retrolsp.mcp;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.secondsun.retrolsp.mcp.tools.SfxInvariantAuditor;
 import dev.secondsun.retrolsp.mcp.tools.SfxMacroExpanderTool;
@@ -9,7 +8,6 @@ import dev.secondsun.retrolsp.mcp.tools.SfxSymbolLookupTool;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransport;
-import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
@@ -22,8 +20,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Model Context Protocol (MCP) server for Retro-LSP, exposing SuperFX static analysis,
- * macro expansion, symbol lookup, and register analysis tools over stdio or custom transports.
+ * Model Context Protocol (MCP) server for Retro-LSP, exposing SuperFX static analysis, macro
+ * expansion, symbol lookup, and register analysis tools over stdio or custom transports.
  */
 public class RetroLspMcpServer implements AutoCloseable {
 
@@ -156,8 +154,7 @@ public class RetroLspMcpServer implements AutoCloseable {
               "Analyzes SuperFX register allocation, live-range intervals, CFG basic blocks, and register pressure.",
               ANALYZE_REGISTERS_SCHEMA);
 
-      ServerCapabilities capabilities =
-          ServerCapabilities.builder().tools(true).build();
+      ServerCapabilities capabilities = ServerCapabilities.builder().tools(true).build();
 
       this.syncServer =
           McpServer.sync(transport)
@@ -218,13 +215,13 @@ public class RetroLspMcpServer implements AutoCloseable {
             default -> throw new IllegalArgumentException("Unknown tool: " + name);
           };
 
-      String jsonText = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(resultData);
+      String jsonText =
+          objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(resultData);
       return new CallToolResult(List.of(new TextContent(jsonText)), false);
     } catch (Exception e) {
       LOG.log(Level.WARNING, "Error executing MCP tool '" + name + "': " + e.getMessage(), e);
       return new CallToolResult(
-          List.of(new TextContent("Error executing tool '" + name + "': " + e.getMessage())),
-          true);
+          List.of(new TextContent("Error executing tool '" + name + "': " + e.getMessage())), true);
     }
   }
 

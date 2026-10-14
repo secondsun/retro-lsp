@@ -46,7 +46,13 @@ The extension and language server can be configured through the following settin
 | `retroca65.sourceDirectory` | `string` | Relative path from the workspace root to the assembly source files (default: workspace root). |
 | `retroca65.libSFXRoot` | `string` | Relative path from the workspace root to the `libSFX` root directory. |
 | `retroca65.serverPath` | `string` | Optional path to a custom `launcher` executable (overrides the bundled language server). |
+| `retroca65.enableMcp` | `boolean` | Enable Model Context Protocol (MCP) mode on server launch (default: `false`). |
 | `retroca65.trace.server` | `string` | Traces communication between VS Code and the language server (`off`, `messages`, `verbose`). |
+
+### VS Code Commands
+
+- **`RetroCA65: Restart Server`**: Gracefully stops and restarts the language server.
+- **`RetroCA65: Restart Server with MCP`**: Sets `retroca65.enableMcp` to `true` and restarts the server with `--mcp`.
 
 ## Features
 
@@ -56,8 +62,14 @@ The extension and language server can be configured through the following settin
 - **Go to Included File**: Navigate to files specified in CA65 `.include` control commands.
 - **Autocomplete File Includes**: Directory and file completions when typing `.include "..."`.
 - **Control Command Completion**: Contextual autocompletion for common CA65 control commands and directives.
-- **SuperFX Documentation Hovers**: Hover over register constants in `.sgs` files to view register documentation.
+- **Documentation Hovers**: Accurate subroutine signatures, doc comments, and opcode/directive documentation.
+- **Model Context Protocol (MCP) Server**: Run `launcher --mcp` to expose SuperFX static analysis tools over stdio:
+  - `sfx_audit_invariants`: Audits code for 8-NOP pipeline settling before `stop`, 16-bit word alignment on `ldw`/`stw`, lack of hardware `MERGE` on FX3, and modal instruction lifetimes (`with`, `to`, `from`).
+  - `sfx_expand_macro`: Expands X-GSU macros (`function`, `for`, `if_lt`, etc.) to ca65 SuperFX instructions via `CA65MacroExpander`.
+  - `sfx_lookup_symbol`: Resolves symbol definitions, scope hierarchies, and doc comments extracted by `retro-common`.
+  - `sfx_analyze_registers`: Live-range intervals, register pressure, and suggested register colorings via `sfx-optimizer`.
 - **Syntax Highlighting**: Comprehensive SNES and CA65 grammar highlighting based on libSFX syntaxes.
+
 
 ## Future Plans
 

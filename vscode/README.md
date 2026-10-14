@@ -25,7 +25,8 @@ Platform-specific extension packages are published on [GitHub Releases](https://
 - **Go to Included File**: Navigate to files specified in CA65 `.include` control commands.
 - **Autocomplete File Includes**: Directory and file completions when typing `.include "..."`.
 - **Control Command Completion**: Contextual autocompletion for common CA65 control commands and directives.
-- **SuperFX Documentation Hovers**: Hover over register constants in `.sgs` files to view register documentation.
+- **Documentation Hovers**: Accurate subroutine signatures, doc comments, and opcode/directive documentation.
+- **Model Context Protocol (MCP) Mode**: Optional MCP server mode exposing SuperFX static analysis tools over stdio.
 - **Syntax Highlighting**: Comprehensive SNES and CA65 grammar highlighting based on libSFX syntaxes.
 
 ## Configuration
@@ -37,7 +38,14 @@ The extension can be configured in your settings (`settings.json`):
 | `retroca65.sourceDirectory` | `string` | Relative path from the workspace root to the assembly source files (default: workspace root). |
 | `retroca65.libSFXRoot` | `string` | Relative path from the workspace root to the `libSFX` root directory. |
 | `retroca65.serverPath` | `string` | Optional path to a custom `launcher` executable (overrides the bundled language server). |
+| `retroca65.enableMcp` | `boolean` | Enable Model Context Protocol (MCP) mode on server launch (default: `false`). |
 | `retroca65.trace.server` | `string` | Traces communication between VS Code and the language server (`off`, `messages`, `verbose`). |
+
+## Commands
+
+- **`RetroCA65: Restart Server`**: Gracefully stops and restarts the language server.
+- **`RetroCA65: Restart Server with MCP`**: Sets `retroca65.enableMcp` to `true` and restarts the server with `--mcp`.
+
 
 ## Contributing & Issues
 

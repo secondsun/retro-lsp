@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags:
+      - 'v*.*.*'
       - 'v*'
   workflow_dispatch:
     inputs:
@@ -23,6 +24,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   build-backend:
@@ -45,6 +47,38 @@ jobs:
       - name: Make Scripts Executable
         run: chmod +x mvnw scripts/*.sh
 
+      - name: Configure GitHub Packages Authentication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p ~/.m2
+          cat <<EOF > ~/.m2/settings.xml
+          <settings>
+            <servers>
+              <server>
+                <id>github</id>
+                <username>\${env.GITHUB_ACTOR}</username>
+                <password>\${env.GITHUB_TOKEN}</password>
+              </server>
+              <server>
+                <id>github-retro-common</id>
+                <username>\${env.GITHUB_ACTOR}</username>
+                <password>\${env.GITHUB_TOKEN}</password>
+              </server>
+              <server>
+                <id>github-sfx-optimizer</id>
+                <username>\${env.GITHUB_ACTOR}</username>
+                <password>\${env.GITHUB_TOKEN}</password>
+              </server>
+              <server>
+                <id>github-languageserver</id>
+                <username>\${env.GITHUB_ACTOR}</username>
+                <password>\${env.GITHUB_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
       - name: Check Code Formatting
         run: ./mvnw spotless:check
 
@@ -54,8 +88,10 @@ jobs:
       - name: Verify Javadoc
         run: ./mvnw javadoc:javadoc
 
-      - name: Package Java Backend (JAR, Sources, Javadoc)
-        run: ./mvnw clean package -DskipTests
+      - name: Deploy Java Backend to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./mvnw clean deploy -DskipTests -Dgpg.skip=true -DskipGpg=true --no-transfer-progress
 
       - name: Upload Backend JAR Artifacts
         uses: actions/upload-artifact@v4

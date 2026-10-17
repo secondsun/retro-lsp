@@ -7,7 +7,7 @@
 
   <groupId>dev.secondsun</groupId>
   <artifactId>retro-lsp</artifactId>
-  <version>0.1.0-PROTOTYPE</version>
+  <version>0.2.0-PROTOTYPE</version>
 
   <name>retro-lsp</name>
   <url>https://github.com/secondsun/retro-lsp</url>
@@ -31,8 +31,43 @@
     <connection>scm:git:git://github.com/secondsun/retro-lsp.git</connection>
     <developerConnection>scm:git:ssh://github.com:secondsun/retro-lsp.git</developerConnection>
     <url>http://github.com/secondsun/retro-lsp/tree/prototype</url>
-    <tag>v0.1.0</tag>
+    <tag>v0.2.0</tag>
   </scm>
+
+  <distributionManagement>
+    <repository>
+      <id>github</id>
+      <name>GitHub Packages</name>
+      <url>https://maven.pkg.github.com/secondsun/retro-lsp</url>
+    </repository>
+  </distributionManagement>
+
+  <repositories>
+    <repository>
+      <id>github-retro-common</id>
+      <name>GitHub Packages retro-common</name>
+      <url>https://maven.pkg.github.com/secondsun/retro-common</url>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>github-sfx-optimizer</id>
+      <name>GitHub Packages sfx-optimizer</name>
+      <url>https://maven.pkg.github.com/secondsun/sfx-optimizer</url>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>github-languageserver</id>
+      <name>GitHub Packages java-language-server</name>
+      <url>https://maven.pkg.github.com/secondsun/java-language-server</url>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -60,18 +95,18 @@
     <dependency>
       <groupId>dev.secondsun</groupId>
       <artifactId>retro-common</artifactId>
-      <version>1.6.0</version>
+      <version>1.7.0</version>
     </dependency>
     <dependency>
       <groupId>dev.secondsun</groupId>
       <artifactId>sfx-optimizer</artifactId>
-      <version>0.4</version>
+      <version>0.5.0</version>
     </dependency>
 
     <dependency>
       <groupId>dev.secondsun</groupId>
       <artifactId>languageserver</artifactId>
-      <version>0.12.0</version>
+      <version>0.13.0</version>
     </dependency>
     <dependency>
       <groupId>io.modelcontextprotocol.sdk</groupId>

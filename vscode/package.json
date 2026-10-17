@@ -17,8 +17,7 @@
   ],
   "activationEvents": [
     "onLanguage:retroca65",
-    "onCommand:retroca65.restartServer",
-    "onCommand:retroca65.restartServerWithMcp"
+    "onCommand:retroca65.restartServer"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -48,10 +47,6 @@
       {
         "command": "retroca65.restartServer",
         "title": "RetroCA65: Restart Server"
-      },
-      {
-        "command": "retroca65.restartServerWithMcp",
-        "title": "RetroCA65: Restart Server with MCP"
       }
     ],
     "configuration": {
@@ -62,12 +57,6 @@
           "type": "string",
           "default": "",
           "description": "Path to the retro-lsp launcher executable or script. If not set, defaults to project dist directory."
-        },
-        "retroca65.enableMcp": {
-          "scope": "window",
-          "type": "boolean",
-          "default": false,
-          "description": "Enable Model Context Protocol (MCP) mode on server launch"
         },
         "retroca65.trace.server": {
           "scope": "window",

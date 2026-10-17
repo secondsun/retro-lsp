@@ -28,6 +28,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -41,6 +44,7 @@ public class CA65LanguageServer extends LanguageServer {
   // TODO Actually make use of language client
   // private final LanguageClient client;
   private URI workspaceRoot;
+  private CompletableFuture<Void> indexingFuture = CompletableFuture.completedFuture(null);
 
   private final HoverFeature hoverFeature;
   private DocumentLinkFeature documentLinkFeature;
@@ -91,8 +95,23 @@ public class CA65LanguageServer extends LanguageServer {
   @Override
   public InitializeResult initialize(InitializeParams params) {
     this.workspaceRoot = params.rootUri;
+    if (this.workspaceRoot == null
+        && params.workspaceFolders != null
+        && !params.workspaceFolders.isEmpty()) {
+      this.workspaceRoot = params.workspaceFolders.get(0).uri;
+    }
 
-    this.projectService.includeDir(this.workspaceRoot);
+    if (this.workspaceRoot != null) {
+      this.indexingFuture =
+          CompletableFuture.runAsync(
+              () -> {
+                try {
+                  this.projectService.includeDir(this.workspaceRoot);
+                } catch (Exception e) {
+                  LOG.log(Level.WARNING, "Failed to index workspace: " + e.getMessage(), e);
+                }
+              });
+    }
 
     var initializeData = new JsonObject();
     for (Feature<?, ?> feature : features) {
@@ -106,28 +125,73 @@ public class CA65LanguageServer extends LanguageServer {
     LOG.info("initialized");
   }
 
+  @Override
   public void didChangeConfiguration(dev.secondsun.lsp.DidChangeConfigurationParams params) {
+    if (this.workspaceRoot == null || params == null || params.settings == null) {
+      return;
+    }
     try {
-      var libSFXRootParam =
-          params.settings.get("retroca65").getAsJsonObject().get("libSFXRoot").getAsString();
-      var sourceDirectoryParam =
-          params.settings.get("retroca65").getAsJsonObject().get("sourceDirectory").getAsString();
-      this.libSFXRoot = Path.of(this.workspaceRoot).resolve(libSFXRootParam);
-      var sourceDirectoryPath = Path.of(this.workspaceRoot).resolve(sourceDirectoryParam);
-
-      if (libSFXRoot.toFile().exists()) {
-        projectService.includeDir(libSFXRoot.toUri());
+      var retroca65Config = params.settings.get("retroca65");
+      if (retroca65Config != null && retroca65Config.isJsonObject()) {
+        var obj = retroca65Config.getAsJsonObject();
+        if (obj.has("libSFXRoot") && !obj.get("libSFXRoot").isJsonNull()) {
+          var libSFXRootParam = obj.get("libSFXRoot").getAsString();
+          this.libSFXRoot = Path.of(this.workspaceRoot).resolve(libSFXRootParam);
+          if (libSFXRoot.toFile().exists()) {
+            Thread.ofVirtual().start(() -> projectService.includeDir(libSFXRoot.toUri()));
+          }
+        }
+        if (obj.has("sourceDirectory") && !obj.get("sourceDirectory").isJsonNull()) {
+          var sourceDirectoryParam = obj.get("sourceDirectory").getAsString();
+          var sourceDirectoryPath = Path.of(this.workspaceRoot).resolve(sourceDirectoryParam);
+          if (sourceDirectoryPath.toFile().exists()) {
+            Thread.ofVirtual().start(() -> projectService.includeDir(sourceDirectoryPath.toUri()));
+          }
+        }
       }
-      if (sourceDirectoryPath.toFile().exists()) {
-        projectService.includeDir(sourceDirectoryPath.toUri());
-      }
-
     } catch (Exception ignore) {
-      // ignore because I don't care about if libSFX root is setup right
+      // ignore
     }
   }
-  ;
 
+  @Override
+  public void didOpenTextDocument(dev.secondsun.lsp.DidOpenTextDocumentParams params) {
+    if (params != null && params.textDocument != null && params.textDocument.uri != null) {
+      if (params.textDocument.text != null && !params.textDocument.text.isEmpty()) {
+        projectService.updateFileContents(params.textDocument.uri, params.textDocument.text);
+      } else {
+        projectService.refreshFileContents(params.textDocument.uri);
+      }
+    }
+  }
+
+  @Override
+  public void didChangeTextDocument(dev.secondsun.lsp.DidChangeTextDocumentParams params) {
+    if (params != null && params.textDocument != null && params.textDocument.uri != null) {
+      if (params.contentChanges != null && !params.contentChanges.isEmpty()) {
+        var lastChange = params.contentChanges.get(params.contentChanges.size() - 1);
+        if (lastChange != null && lastChange.text != null) {
+          projectService.updateFileContents(params.textDocument.uri, lastChange.text);
+          return;
+        }
+      }
+      projectService.refreshFileContents(params.textDocument.uri);
+    }
+  }
+
+  @Override
+  public void didSaveTextDocument(dev.secondsun.lsp.DidSaveTextDocumentParams params) {
+    if (params != null && params.textDocument != null && params.textDocument.uri != null) {
+      projectService.refreshFileContents(params.textDocument.uri);
+    }
+  }
+
+  @Override
+  public void didCloseTextDocument(dev.secondsun.lsp.DidCloseTextDocumentParams params) {
+    // no-op
+  }
+
+  @Override
   public void didChangeWatchedFiles(dev.secondsun.lsp.DidChangeWatchedFilesParams params) {
     for (var change : params.changes) {
       switch (change.type) {
@@ -139,10 +203,20 @@ public class CA65LanguageServer extends LanguageServer {
       }
     }
   }
-  ;
+
+  public void waitForIndexing() {
+    try {
+      if (indexingFuture != null && !indexingFuture.isDone()) {
+        indexingFuture.get(10, TimeUnit.SECONDS);
+      }
+    } catch (Exception e) {
+      LOG.log(Level.FINE, "Indexing wait finished or timed out: " + e.getMessage());
+    }
+  }
 
   @Override
   public Optional<CompletionList> completion(TextDocumentPositionParams params) {
+    waitForIndexing();
     var file = projectService.getFileContents(params.textDocument.uri);
     List<dev.secondsun.lsp.CompletionItem> allItems = new ArrayList<>();
     for (var feature2 : features) {
@@ -163,12 +237,13 @@ public class CA65LanguageServer extends LanguageServer {
 
   @Override
   public Optional<Hover> hover(TextDocumentPositionParams params) {
+    waitForIndexing();
     return hoverFeature.handle(params, projectService.getFileContents(params.textDocument.uri));
   }
 
   @Override
   public List<DocumentLink> documentLink(DocumentLinkParams params) {
-
+    waitForIndexing();
     return documentLinkFeature
         .handle(params, projectService.getFileContents(params.textDocument.uri))
         .orElse(List.of());
@@ -176,6 +251,7 @@ public class CA65LanguageServer extends LanguageServer {
 
   @Override
   public Optional<List<Location>> gotoDefinition(TextDocumentPositionParams params) {
+    waitForIndexing();
     return gotoDefinitionLinkFeature.handle(
         params, projectService.getFileContents(params.textDocument.uri));
   }

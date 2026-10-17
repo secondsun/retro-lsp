@@ -13,8 +13,4 @@ open module dev.secondsun.retrolsp {
   requires com.fasterxml.jackson.databind;
   requires com.fasterxml.jackson.core;
   requires org.slf4j;
-  requires jdk.httpserver;
-  requires java.net.http;
-  requires reactor.core;
-  requires org.reactivestreams;
 }

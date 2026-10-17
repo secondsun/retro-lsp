@@ -58,38 +58,19 @@ describe('VS Code Extension MCP Toggle & Server Launcher Integration', () => {
         const packageJsonPath = path.resolve(__dirname, '../../../package.json');
         const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
-        it('should declare retroca65.enableMcp configuration property', () => {
-            const configProps = pkg.contributes?.configuration?.properties;
-            assert.ok(configProps, 'contributes.configuration.properties must exist');
-
-            const mcpProp = configProps['retroca65.enableMcp'];
-            assert.ok(mcpProp, 'retroca65.enableMcp property must be defined');
-            assert.strictEqual(mcpProp.type, 'boolean');
-            assert.strictEqual(mcpProp.default, false);
-            assert.strictEqual(
-                mcpProp.description,
-                'Enable Model Context Protocol (MCP) mode on server launch'
-            );
-        });
-
-        it('should declare retroca65.restartServer and retroca65.restartServerWithMcp commands', () => {
+        it('should declare retroca65.restartServer command', () => {
             const commands = pkg.contributes?.commands;
             assert.ok(Array.isArray(commands), 'contributes.commands must be an array');
 
             const restartCmd = commands.find((c: any) => c.command === 'retroca65.restartServer');
             assert.ok(restartCmd, 'retroca65.restartServer command must be registered');
             assert.strictEqual(restartCmd.title, 'RetroCA65: Restart Server');
-
-            const restartMcpCmd = commands.find((c: any) => c.command === 'retroca65.restartServerWithMcp');
-            assert.ok(restartMcpCmd, 'retroca65.restartServerWithMcp command must be registered');
-            assert.strictEqual(restartMcpCmd.title, 'RetroCA65: Restart Server with MCP');
         });
 
-        it('should include restart commands in activationEvents', () => {
+        it('should include restart command in activationEvents', () => {
             const activationEvents = pkg.activationEvents;
             assert.ok(Array.isArray(activationEvents), 'activationEvents must be an array');
             assert.ok(activationEvents.includes('onCommand:retroca65.restartServer'));
-            assert.ok(activationEvents.includes('onCommand:retroca65.restartServerWithMcp'));
         });
     });
 });

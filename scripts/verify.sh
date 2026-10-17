@@ -9,7 +9,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$DIR"
 
 echo "=== [1/4] Running Java Tests & Formatting Check ==="
-./mvnw clean spotless:check package
+./mvnw clean spotless:check test
 
 echo "=== [2/4] Building JLink Native Image ==="
 OS="$(uname -s)"

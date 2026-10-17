@@ -1,6 +1,9 @@
 package dev.secondsun.retrolsp.mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.secondsun.retro.util.FileService;
+import dev.secondsun.retro.util.ProjectService;
+import dev.secondsun.retro.util.SymbolService;
 import dev.secondsun.retrolsp.mcp.tools.SfxInvariantAuditor;
 import dev.secondsun.retrolsp.mcp.tools.SfxMacroExpanderTool;
 import dev.secondsun.retrolsp.mcp.tools.SfxRegisterAnalysisTool;
@@ -13,19 +16,36 @@ import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.ServerMcpTransport;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 /**
  * Model Context Protocol (MCP) server for Retro-LSP, exposing SuperFX static analysis, macro
- * expansion, symbol lookup, and register analysis tools over stdio or custom transports.
+ * expansion, symbol lookup, and register analysis tools over stdio or custom transports backed by a
+ * single shared persistent {@link ProjectService}.
+ *
+ * <p>Enforces a strict workspace sandbox boundary and performs lazy, on-demand directory indexing.
  */
 public class RetroLspMcpServer implements AutoCloseable {
 
   private static final Logger LOG = Logger.getLogger(RetroLspMcpServer.class.getName());
+  private static final AtomicBoolean loggingConfigured = new AtomicBoolean(false);
+  private static Path currentLogFile;
+  private static FileHandler currentFileHandler;
 
   private static final String AUDIT_INVARIANTS_SCHEMA =
       """
@@ -34,14 +54,13 @@ public class RetroLspMcpServer implements AutoCloseable {
         "properties": {
           "code": {
             "type": "string",
-            "description": "SuperFX CA65 assembly code to audit"
+            "description": "SuperFX CA65 assembly code to audit (optional if uri is provided)"
           },
           "uri": {
             "type": "string",
-            "description": "Optional file URI"
+            "description": "Optional file URI pointing to workspace source"
           }
-        },
-        "required": ["code"]
+        }
       }
       """;
 
@@ -52,10 +71,13 @@ public class RetroLspMcpServer implements AutoCloseable {
         "properties": {
           "code": {
             "type": "string",
-            "description": "CA65 assembly source code containing macros"
+            "description": "CA65 assembly source code containing macros (optional if uri is provided)"
+          },
+          "uri": {
+            "type": "string",
+            "description": "Optional document URI to expand"
           }
-        },
-        "required": ["code"]
+        }
       }
       """;
 
@@ -92,44 +114,80 @@ public class RetroLspMcpServer implements AutoCloseable {
         "properties": {
           "code": {
             "type": "string",
-            "description": "SuperFX assembly code to analyze"
+            "description": "SuperFX assembly code to analyze (optional if uri is provided)"
+          },
+          "uri": {
+            "type": "string",
+            "description": "Optional document URI to analyze"
           },
           "function": {
             "type": "string",
             "description": "Optional function name to focus analysis on"
           }
-        },
-        "required": ["code"]
+        }
       }
       """;
 
   private final ObjectMapper objectMapper;
+  private final ProjectService projectService;
+  private final Path workspaceRoot;
   private final SfxInvariantAuditor invariantAuditor;
   private final SfxMacroExpanderTool macroExpander;
   private final SfxSymbolLookupTool symbolLookup;
   private final SfxRegisterAnalysisTool registerAnalysis;
-  private final ServerMcpTransport transport;
   private final McpSyncServer syncServer;
   private final CountDownLatch stopLatch;
+  private final WorkspaceFileWatcher fileWatcher;
 
-  /** Constructs a standalone MCP server instance without transport (for tool testing). */
+  private final AtomicBoolean workspaceRootIndexed = new AtomicBoolean(false);
+  private final Set<Path> indexedDirectories = ConcurrentHashMap.newKeySet();
+
+  /** Constructs a standalone in-memory MCP server instance without transport (for tool testing). */
   public RetroLspMcpServer() {
-    this(null);
+    this(new ProjectService(new FileService(), new SymbolService()), null, null);
+  }
+
+  /** Constructs an in-memory MCP server with a custom ProjectService. */
+  public RetroLspMcpServer(ProjectService projectService) {
+    this(projectService, null, null);
+  }
+
+  /** Constructs an MCP server attached to the given transport and required workspace root. */
+  public RetroLspMcpServer(ServerMcpTransport transport, Path workspaceRoot) {
+    this(new ProjectService(new FileService(), new SymbolService()), transport, workspaceRoot);
   }
 
   /**
-   * Constructs an MCP server attached to the given transport.
+   * Primary constructor initializing persistent services, workspace root boundary, background
+   * watcher, and MCP tool registrations.
    *
-   * @param transport the transport to listen and serve on, or null for standalone
+   * @param projectService shared project service
+   * @param transport transport to listen and serve on, or null for standalone
+   * @param workspaceRoot initial workspace directory boundary, or null for none
    */
-  public RetroLspMcpServer(ServerMcpTransport transport) {
-    this.transport = transport;
+  public RetroLspMcpServer(
+      ProjectService projectService, ServerMcpTransport transport, Path workspaceRoot) {
     this.objectMapper = new ObjectMapper();
-    this.invariantAuditor = new SfxInvariantAuditor();
-    this.macroExpander = new SfxMacroExpanderTool();
-    this.symbolLookup = new SfxSymbolLookupTool();
-    this.registerAnalysis = new SfxRegisterAnalysisTool();
+    this.projectService = Objects.requireNonNull(projectService);
+    this.workspaceRoot = workspaceRoot != null ? workspaceRoot.toAbsolutePath().normalize() : null;
+    this.invariantAuditor = new SfxInvariantAuditor(this.projectService);
+    this.macroExpander = new SfxMacroExpanderTool(this.projectService);
+    this.symbolLookup = new SfxSymbolLookupTool(this.projectService);
+    this.registerAnalysis = new SfxRegisterAnalysisTool(this.projectService);
     this.stopLatch = new CountDownLatch(1);
+
+    WorkspaceFileWatcher watcher = null;
+    if (this.workspaceRoot != null) {
+      try {
+        watcher = new WorkspaceFileWatcher(this.projectService, this.workspaceRoot);
+      } catch (Exception e) {
+        LOG.log(
+            Level.WARNING,
+            "Failed to initialize workspace file watcher for: " + this.workspaceRoot,
+            e);
+      }
+    }
+    this.fileWatcher = watcher;
 
     if (transport != null) {
       Tool auditTool =
@@ -141,13 +199,13 @@ public class RetroLspMcpServer implements AutoCloseable {
       Tool expandTool =
           new Tool(
               "sfx_expand_macro",
-              "Expands CA65 and X-GSU macros (.macro, .define, function, for, stack operations, etc.) into a concrete instruction stream.",
+              "Expands CA65 and X-GSU macros (.macro, .define, function, for, stack operations, etc.) into a concrete instruction stream using the shared workspace FileService.",
               EXPAND_MACRO_SCHEMA);
 
       Tool lookupTool =
           new Tool(
               "sfx_lookup_symbol",
-              "Resolves symbol definitions, scopes, and documentation in CA65 assembly using SymbolService.",
+              "Resolves symbol definitions, scopes, and documentation in CA65 assembly using the shared SymbolService and workspace index.",
               LOOKUP_SYMBOL_SCHEMA);
 
       Tool analyzeTool =
@@ -173,58 +231,167 @@ public class RetroLspMcpServer implements AutoCloseable {
   }
 
   /**
-   * Creates and starts a Retro-LSP MCP server communicating over standard input and output.
+   * Creates and starts a Retro-LSP MCP server communicating over standard input and output for the
+   * given required workspace root.
    *
+   * @param workspaceRoot required root directory of the workspace
    * @return a running RetroLspMcpServer instance
    */
-  public static RetroLspMcpServer createStdio() {
+  public static RetroLspMcpServer createStdio(Path workspaceRoot) {
+    Objects.requireNonNull(workspaceRoot, "workspaceRoot is required when starting MCP server");
     StdioServerTransport transport = new StdioServerTransport(new ObjectMapper());
-    return new RetroLspMcpServer(transport);
+    return new RetroLspMcpServer(transport, workspaceRoot);
   }
 
   /**
-   * Creates and starts a Retro-LSP MCP server listening on HTTP at the default host and given port.
+   * Configures standard Java logging (JUL) for the MCP server to output plain text logs (INFO level
+   * and higher) to a temporary file in java.io.tmpdir with the naming format
+   * retro-lsp-msp.date.time.log.
    *
-   * @param port the port to listen on, or 0 for an ephemeral free port
-   * @return a running RetroLspMcpServer instance
-   * @throws java.io.IOException if the server fails to bind
+   * @return the path to the configured log file, or null if configuration failed
    */
-  public static RetroLspMcpServer createHttp(int port) throws java.io.IOException {
-    return createHttp("127.0.0.1", port);
-  }
-
-  /**
-   * Creates and starts a Retro-LSP MCP server listening on HTTP at the specified host and port.
-   *
-   * @param host the host to bind to
-   * @param port the port to listen on, or 0 for an ephemeral free port
-   * @return a running RetroLspMcpServer instance
-   * @throws java.io.IOException if the server fails to bind
-   */
-  public static RetroLspMcpServer createHttp(String host, int port) throws java.io.IOException {
-    HttpServerMcpTransport transport = new HttpServerMcpTransport(host, port);
-    return new RetroLspMcpServer(transport);
-  }
-
-  /**
-   * Returns the bound port if running over {@link HttpServerMcpTransport}, or -1 otherwise.
-   *
-   * @return the HTTP port number, or -1 if not an HTTP server
-   */
-  public int getPort() {
-    if (transport instanceof HttpServerMcpTransport httpTransport) {
-      return httpTransport.getPort();
+  public static synchronized Path configureLogging() {
+    if (loggingConfigured.get()) {
+      return currentLogFile;
     }
-    return -1;
+    return configureLogging(
+        Path.of(System.getProperty("java.io.tmpdir", "/tmp")), LocalDateTime.now());
   }
 
   /**
-   * Returns the active {@link ServerMcpTransport}, or null if standalone.
+   * Configures standard Java logging for the MCP server using a specified directory and timestamp.
    *
-   * @return the transport instance
+   * @param dir the directory to create log files in
+   * @param timestamp the timestamp for filename generation
+   * @return the path to the primary log file
    */
-  public ServerMcpTransport getTransport() {
-    return transport;
+  public static synchronized Path configureLogging(Path dir, LocalDateTime timestamp) {
+    try {
+      Files.createDirectories(dir);
+
+      if (currentFileHandler != null) {
+        Logger.getLogger("").removeHandler(currentFileHandler);
+        currentFileHandler.close();
+        currentFileHandler = null;
+      }
+
+      String date = DateTimeFormatter.ofPattern("yyyy-MM-dd").format(timestamp);
+      String time = DateTimeFormatter.ofPattern("HHmmss").format(timestamp);
+
+      String fileName = "retro-lsp-msp." + date + "." + time + ".log";
+      Path logPath = dir.resolve(fileName);
+
+      FileHandler handler = new FileHandler(logPath.toAbsolutePath().toString(), true);
+      handler.setLevel(Level.INFO);
+      handler.setFormatter(new SimpleFormatter());
+
+      Logger rootLogger = Logger.getLogger("");
+      rootLogger.setLevel(Level.INFO);
+      rootLogger.addHandler(handler);
+
+      currentLogFile = logPath;
+      currentFileHandler = handler;
+      loggingConfigured.set(true);
+
+      return logPath;
+    } catch (Exception e) {
+      System.err.println("Failed to configure MCP server file logging: " + e.getMessage());
+      return null;
+    }
+  }
+
+  /**
+   * Returns the path to the currently active log file, if logging was configured.
+   *
+   * @return log file path or null
+   */
+  public static synchronized Path getLogFilePath() {
+    return currentLogFile;
+  }
+
+  /** Resets logging configuration and closes active file handlers (primarily for testing). */
+  public static synchronized void resetLoggingForTesting() {
+    if (currentFileHandler != null) {
+      Logger.getLogger("").removeHandler(currentFileHandler);
+      currentFileHandler.close();
+      currentFileHandler = null;
+    }
+    currentLogFile = null;
+    loggingConfigured.set(false);
+  }
+
+  public ProjectService getProjectService() {
+    return projectService;
+  }
+
+  public Path getWorkspaceRoot() {
+    return workspaceRoot;
+  }
+
+  /**
+   * Validates that the provided URI resides within the configured workspace root boundary. Throws
+   * {@link SecurityException} if access is outside boundary.
+   *
+   * @param uri URI to validate
+   */
+  public void validateUriWithinWorkspace(URI uri) {
+    if (uri == null) {
+      return;
+    }
+    String uriStr = uri.toString();
+    if (uriStr.startsWith("file:///snippet")
+        || !uri.isAbsolute()
+        || !"file".equalsIgnoreCase(uri.getScheme())) {
+      return;
+    }
+    if (workspaceRoot != null) {
+      Path target = Path.of(uri).toAbsolutePath().normalize();
+      if (!target.startsWith(workspaceRoot)) {
+        throw new SecurityException(
+            "Access denied: URI '"
+                + uri
+                + "' is outside the configured workspace boundary: '"
+                + workspaceRoot
+                + "'");
+      }
+    }
+  }
+
+  /**
+   * Ensures that the target file or directory is indexed in the ProjectService on-demand.
+   *
+   * @param uri file URI to ensure indexed, or null to trigger lazy root indexing
+   */
+  public void ensureIndexed(URI uri) {
+    if (uri != null && "file".equalsIgnoreCase(uri.getScheme())) {
+      validateUriWithinWorkspace(uri);
+      if (!uri.toString().startsWith("file:///snippet")) {
+        try {
+          Path path = Path.of(uri).toAbsolutePath().normalize();
+          Path dir = Files.isDirectory(path) ? path : path.getParent();
+          if (dir != null && indexedDirectories.add(dir)) {
+            projectService.includeDir(dir.toUri());
+            if (fileWatcher != null) {
+              fileWatcher.registerDirectory(dir);
+            }
+          }
+        } catch (Exception e) {
+          LOG.log(Level.WARNING, "Failed to on-demand index directory for URI: " + uri, e);
+        }
+      }
+    } else if (uri == null && workspaceRoot != null) {
+      if (workspaceRootIndexed.compareAndSet(false, true)) {
+        try {
+          projectService.includeDir(workspaceRoot.toUri());
+          indexedDirectories.add(workspaceRoot);
+          if (fileWatcher != null) {
+            fileWatcher.registerDirectory(workspaceRoot);
+          }
+        } catch (Exception e) {
+          LOG.log(Level.WARNING, "Failed lazy indexing for workspace root: " + workspaceRoot, e);
+        }
+      }
+    }
   }
 
   /**
@@ -236,28 +403,36 @@ public class RetroLspMcpServer implements AutoCloseable {
    */
   public CallToolResult executeTool(String name, Map<String, Object> args) {
     try {
+      String uriStr = (String) args.get("uri");
+      URI uri = uriStr != null ? URI.create(uriStr) : null;
+      if (uri != null) {
+        validateUriWithinWorkspace(uri);
+        ensureIndexed(uri);
+      } else {
+        ensureIndexed(null);
+      }
+
       Object resultData =
           switch (name) {
             case "sfx_audit_invariants" -> {
               String code = (String) args.get("code");
-              yield invariantAuditor.audit(code);
+              yield invariantAuditor.audit(code, uriStr);
             }
             case "sfx_expand_macro" -> {
               String code = (String) args.get("code");
-              yield macroExpander.expand(code);
+              yield macroExpander.expand(code, uriStr);
             }
             case "sfx_lookup_symbol" -> {
               String symbol = (String) args.get("symbol");
               String code = (String) args.get("code");
-              String uri = (String) args.get("uri");
               Number lineNum = (Number) args.get("line");
               Integer line = lineNum != null ? lineNum.intValue() : null;
-              yield symbolLookup.lookup(symbol, code, uri, line);
+              yield symbolLookup.lookup(symbol, code, uriStr, line);
             }
             case "sfx_analyze_registers" -> {
               String code = (String) args.get("code");
               String function = (String) args.get("function");
-              yield registerAnalysis.analyze(code, function);
+              yield registerAnalysis.analyze(code, uriStr, function);
             }
             default -> throw new IllegalArgumentException("Unknown tool: " + name);
           };
@@ -265,6 +440,9 @@ public class RetroLspMcpServer implements AutoCloseable {
       String jsonText =
           objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(resultData);
       return new CallToolResult(List.of(new TextContent(jsonText)), false);
+    } catch (SecurityException se) {
+      LOG.log(Level.WARNING, "Security boundary violation: " + se.getMessage());
+      return new CallToolResult(List.of(new TextContent(se.getMessage())), true);
     } catch (Exception e) {
       LOG.log(Level.WARNING, "Error executing MCP tool '" + name + "': " + e.getMessage(), e);
       return new CallToolResult(
@@ -279,18 +457,18 @@ public class RetroLspMcpServer implements AutoCloseable {
 
   @Override
   public void close() {
+    if (fileWatcher != null) {
+      try {
+        fileWatcher.close();
+      } catch (Exception e) {
+        LOG.log(Level.FINE, "Error closing file watcher: " + e.getMessage(), e);
+      }
+    }
     if (syncServer != null) {
       try {
         syncServer.close();
       } catch (Exception e) {
         LOG.log(Level.FINE, "Error closing MCP sync server: " + e.getMessage(), e);
-      }
-    }
-    if (transport != null) {
-      try {
-        transport.close();
-      } catch (Exception e) {
-        LOG.log(Level.FINE, "Error closing MCP transport: " + e.getMessage(), e);
       }
     }
     stopLatch.countDown();

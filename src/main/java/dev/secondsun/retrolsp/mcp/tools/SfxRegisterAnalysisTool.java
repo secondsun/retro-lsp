@@ -41,14 +41,47 @@ public class SfxRegisterAnalysisTool {
       List<BlockInfo> blocks,
       List<FunctionInfo> functions) {}
 
+  private final dev.secondsun.retro.util.ProjectService projectService;
+
+  public SfxRegisterAnalysisTool() {
+    this(
+        new dev.secondsun.retro.util.ProjectService(
+            new dev.secondsun.retro.util.FileService(),
+            new dev.secondsun.retro.util.SymbolService()));
+  }
+
+  public SfxRegisterAnalysisTool(dev.secondsun.retro.util.ProjectService projectService) {
+    this.projectService = Objects.requireNonNull(projectService);
+  }
+
   public RegisterAnalysisResult analyze(String code, String functionFilter) {
-    if (code == null || code.isBlank()) {
+    return analyze(code, null, functionFilter);
+  }
+
+  public RegisterAnalysisResult analyze(String code, String uriStr, String functionFilter) {
+    java.net.URI uri = uriStr != null ? java.net.URI.create(uriStr) : null;
+    String sourceCode;
+
+    if (code != null && !code.isBlank()) {
+      sourceCode = code;
+      if (uri != null) {
+        projectService.updateFileContents(uri, code);
+      }
+    } else if (uri != null) {
+      dev.secondsun.retro.util.vo.TokenizedFile tf = projectService.getFileContents(uri);
+      if (tf == null || tf == dev.secondsun.retro.util.vo.TokenizedFile.EMPTY) {
+        throw new IllegalArgumentException("File not found in workspace: " + uri);
+      }
+      List<String> rawLines = tf.getRawLines();
+      sourceCode = (rawLines != null && !rawLines.isEmpty()) ? String.join("\n", rawLines) : "";
+    } else {
       return new RegisterAnalysisResult(
           0, TOTAL_SUPERFX_REGISTERS, "OPTIMAL", List.of(), Map.of(), List.of(), List.of());
     }
 
+    String fileName = uri != null ? (new java.io.File(uri.getPath()).getName()) : "source.sgs";
     CodeAnalyzer analyzer = new CodeAnalyzer();
-    FileAnalysisResultDto dto = analyzer.analyze(code, "source.sgs");
+    FileAnalysisResultDto dto = analyzer.analyze(sourceCode, fileName);
 
     List<IntervalSpanDto> sourceIntervals = dto.getIntervals();
     if (functionFilter != null && !functionFilter.isBlank()) {

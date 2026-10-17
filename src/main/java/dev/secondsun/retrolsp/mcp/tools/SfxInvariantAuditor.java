@@ -31,13 +31,43 @@ public class SfxInvariantAuditor {
 
   private record PendingModal(String opcode, int line) {}
 
+  private final dev.secondsun.retro.util.ProjectService projectService;
+
+  public SfxInvariantAuditor() {
+    this(
+        new dev.secondsun.retro.util.ProjectService(
+            new dev.secondsun.retro.util.FileService(),
+            new dev.secondsun.retro.util.SymbolService()));
+  }
+
+  public SfxInvariantAuditor(dev.secondsun.retro.util.ProjectService projectService) {
+    this.projectService = Objects.requireNonNull(projectService);
+  }
+
   public AuditResult audit(String code) {
-    if (code == null || code.isBlank()) {
+    return audit(code, null);
+  }
+
+  public AuditResult audit(String code, String uriStr) {
+    java.net.URI uri = uriStr != null ? java.net.URI.create(uriStr) : null;
+    TokenizedFile file;
+
+    if (code != null && !code.isBlank()) {
+      if (uri != null) {
+        projectService.updateFileContents(uri, code);
+        file = projectService.getFileContents(uri);
+      } else {
+        CA65Scanner scanner = new CA65Scanner();
+        file = scanner.tokenize(code);
+      }
+    } else if (uri != null) {
+      file = projectService.getFileContents(uri);
+      if (file == null || file == TokenizedFile.EMPTY) {
+        throw new IllegalArgumentException("File not found in workspace: " + uri);
+      }
+    } else {
       return new AuditResult(true, List.of(), "Empty code: no invariants audited.");
     }
-
-    CA65Scanner scanner = new CA65Scanner();
-    TokenizedFile file = scanner.tokenize(code);
 
     List<InvariantViolation> violations = new ArrayList<>();
     int consecutiveNops = 0;

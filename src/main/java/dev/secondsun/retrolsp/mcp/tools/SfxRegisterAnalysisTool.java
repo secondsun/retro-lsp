@@ -60,24 +60,19 @@ public class SfxRegisterAnalysisTool {
 
   public RegisterAnalysisResult analyze(String code, String uriStr, String functionFilter) {
     java.net.URI uri = uriStr != null ? java.net.URI.create(uriStr) : null;
-    String sourceCode;
+    dev.secondsun.retro.util.vo.TokenizedFile tf = projectService.resolveFile(uri, code);
 
-    if (code != null && !code.isBlank()) {
-      sourceCode = code;
-      if (uri != null) {
-        projectService.updateFileContents(uri, code);
-      }
-    } else if (uri != null) {
-      dev.secondsun.retro.util.vo.TokenizedFile tf = projectService.getFileContents(uri);
-      if (tf == null || tf == dev.secondsun.retro.util.vo.TokenizedFile.EMPTY) {
+    if (tf == null || tf.isEmpty()) {
+      if (uri != null && (code == null || code.isBlank())) {
         throw new IllegalArgumentException("File not found in workspace: " + uri);
       }
-      List<String> rawLines = tf.getRawLines();
-      sourceCode = (rawLines != null && !rawLines.isEmpty()) ? String.join("\n", rawLines) : "";
-    } else {
       return new RegisterAnalysisResult(
           0, TOTAL_SUPERFX_REGISTERS, "OPTIMAL", List.of(), Map.of(), List.of(), List.of());
     }
+
+    List<String> rawLines = tf.getRawLines();
+    String sourceCode =
+        (rawLines != null && !rawLines.isEmpty()) ? String.join("\n", rawLines) : "";
 
     String fileName = uri != null ? (new java.io.File(uri.getPath()).getName()) : "source.sgs";
     CodeAnalyzer analyzer = new CodeAnalyzer();

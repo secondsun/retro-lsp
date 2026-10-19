@@ -4,6 +4,7 @@ import dev.secondsun.retro.util.FileService;
 import dev.secondsun.retro.util.ProjectService;
 import dev.secondsun.retro.util.SymbolService;
 import dev.secondsun.retro.util.vo.Location;
+import dev.secondsun.retro.util.vo.TokenizedFile;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,44 +53,22 @@ public class SfxSymbolLookupTool {
     }
 
     URI uri = uriStr != null ? URI.create(uriStr) : null;
-
-    if (code != null && !code.isBlank()) {
-      if (uri != null) {
-        projectService.updateFileContents(uri, code);
-      } else {
-        URI snippetUri = URI.create("file:///snippet.s");
-        projectService.updateFileContents(snippetUri, code);
-        uri = snippetUri;
-      }
+    TokenizedFile file = projectService.resolveFile(uri, code);
+    if (file != null && file.uri != null) {
+      uri = file.uri;
     }
 
-    Location loc = null;
-    String doc = null;
+    Location loc = projectService.resolveLocation(symbol, uri, line);
+    String doc = projectService.resolveDocumentation(symbol, uri, line);
     String scopeName = null;
-
     if (line != null && uri != null) {
-      loc = symbolService.getLocation(symbol, uri, line);
-      doc = symbolService.getDocumentation(symbol, uri, line);
-      var scopeOpt = symbolService.getScopeAt(uri, line);
+      var scopeOpt = projectService.getScopeAt(uri, line);
       if (scopeOpt.isPresent()) {
         scopeName = scopeOpt.get().name();
       }
     }
 
-    if (loc == null && uri != null) {
-      loc = symbolService.getLocation(symbol, uri, 1);
-    }
-    if (loc == null) {
-      loc = symbolService.getLocation(symbol);
-    }
-    if (doc == null || doc.isBlank()) {
-      doc = symbolService.getDocumentation(symbol);
-    }
-
-    List<Location> rawLocations =
-        (uri != null && line != null)
-            ? symbolService.getLocations(symbol, uri, line)
-            : symbolService.getLocations(symbol);
+    List<Location> rawLocations = projectService.resolveLocations(symbol, uri, line);
     List<SymbolLocation> allLocations = new ArrayList<>();
     if (rawLocations != null) {
       for (Location l : rawLocations) {

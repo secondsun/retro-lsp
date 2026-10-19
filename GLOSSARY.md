@@ -8,6 +8,10 @@ Language Server Protocol implementation and Model Context Protocol (MCP) server 
 The persistent in-memory graph of tokenized source files and symbol scopes maintained across the server runtime.
 _Avoid_: Project cache, file store
 
+**Buffer Precedence**:
+The invariant ensuring active, open in-memory editor buffers transparently supersede on-disk file state for all parsing, analysis, and symbol resolution queries.
+_Avoid_: Dirty cache override, buffer shadow
+
 **Symbol Service**:
 The query engine that resolves lexical scopes, symbol definitions, and docstrings across the workspace.
 _Avoid_: Symbol table, symbol dictionary

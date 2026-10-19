@@ -1,10 +1,12 @@
 package dev.secondsun.retrolsp.mcp.tools;
 
-import dev.secondsun.retro.util.CA65Scanner;
 import dev.secondsun.retro.util.Token;
 import dev.secondsun.retro.util.TokenType;
+import dev.secondsun.retro.util.diagnostic.DiagnosticSeverity;
+import dev.secondsun.retro.util.diagnostic.SyntaxDiagnostic;
 import dev.secondsun.retro.util.vo.TokenizedFile;
 import dev.secondsun.retro.util.vo.Tokens;
+import java.net.URI;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -21,7 +23,13 @@ public class SfxInvariantAuditor {
     WARNING
   }
 
-  public record InvariantViolation(int line, String rule, Severity severity, String message) {}
+  public record InvariantViolation(int line, String rule, Severity severity, String message) {
+    public SyntaxDiagnostic toSyntaxDiagnostic(URI uri) {
+      DiagnosticSeverity sev =
+          severity == Severity.ERROR ? DiagnosticSeverity.ERROR : DiagnosticSeverity.WARNING;
+      return new SyntaxDiagnostic(uri, Math.max(1, line), 0, 1, rule, sev, message);
+    }
+  }
 
   public record AuditResult(boolean valid, List<InvariantViolation> violations, String summary) {}
 
@@ -50,29 +58,27 @@ public class SfxInvariantAuditor {
 
   public AuditResult audit(String code, String uriStr) {
     java.net.URI uri = uriStr != null ? java.net.URI.create(uriStr) : null;
-    TokenizedFile file;
-
-    if (code != null && !code.isBlank()) {
-      if (uri != null) {
-        projectService.updateFileContents(uri, code);
-        file = projectService.getFileContents(uri);
-      } else {
-        CA65Scanner scanner = new CA65Scanner();
-        file = scanner.tokenize(code);
-      }
-    } else if (uri != null) {
-      file = projectService.getFileContents(uri);
-      if (file == null || file == TokenizedFile.EMPTY) {
+    TokenizedFile file = projectService.resolveFile(uri, code);
+    if (file == null || file.isEmpty()) {
+      if (uri != null && (code == null || code.isBlank())) {
         throw new IllegalArgumentException("File not found in workspace: " + uri);
       }
-    } else {
       return new AuditResult(true, List.of(), "Empty code: no invariants audited.");
     }
     return audit(file);
   }
 
+  public List<SyntaxDiagnostic> auditDiagnostics(TokenizedFile file) {
+    if (file == null || file.isEmpty()) {
+      return List.of();
+    }
+    AuditResult res = audit(file);
+    URI uri = file.uri();
+    return res.violations().stream().map(v -> v.toSyntaxDiagnostic(uri)).toList();
+  }
+
   public AuditResult audit(TokenizedFile file) {
-    if (file == null || file == TokenizedFile.EMPTY) {
+    if (file == null || file.isEmpty()) {
       return new AuditResult(true, List.of(), "Empty code: no invariants audited.");
     }
 
@@ -89,24 +95,23 @@ public class SfxInvariantAuditor {
         continue;
       }
 
-      List<Token> tokens = lineTokens.tokens();
-      String rawLine = file.getLineText(lineIdx) != null ? file.getLineText(lineIdx).trim() : "";
-
       // Check if line defines a label
-      boolean isLabelOnly = isLabelDefinitionLine(tokens, rawLine);
-      if (isLabelOnly) {
+      if (file.isLabelOnly(lineIdx)) {
         consecutiveNops = 0; // Labels break straight-line NOP settling
         continue;
       }
 
       // Find primary mnemonic/instruction
-      int opcodeTokenIdx = findOpcodeIndex(tokens);
-      if (opcodeTokenIdx < 0) {
+      Optional<Token> opcodeOpt = file.getPrimaryOpcode(lineIdx);
+      if (opcodeOpt.isEmpty()) {
         // Directives (.segment, .byte, etc.) or pure comments
         continue;
       }
 
-      Token opcodeToken = tokens.get(opcodeTokenIdx);
+      Token opcodeToken = opcodeOpt.get();
+      List<Token> tokens = lineTokens.tokens();
+      String rawLine = file.getLineText(lineIdx) != null ? file.getLineText(lineIdx).trim() : "";
+      int opcodeTokenIdx = tokens.indexOf(opcodeToken);
       String mnemonic = opcodeToken.text().toLowerCase(Locale.ROOT);
 
       // Check Invariant 3: NO_HARDWARE_MERGE
@@ -200,36 +205,6 @@ public class SfxInvariantAuditor {
             violations.size(), valid ? "PASSED" : "FAILED");
 
     return new AuditResult(valid, violations, summary);
-  }
-
-  private boolean isLabelDefinitionLine(List<Token> tokens, String rawLine) {
-    if (tokens.isEmpty()) return false;
-    if (tokens.size() == 1 && tokens.get(0).text().endsWith(":")) {
-      return true;
-    }
-    if (rawLine.endsWith(":")) {
-      return true;
-    }
-    return tokens.size() >= 2 && tokens.get(tokens.size() - 1).type == TokenType.TOK_COLON;
-  }
-
-  private int findOpcodeIndex(List<Token> tokens) {
-    for (int i = 0; i < tokens.size(); i++) {
-      Token t = tokens.get(i);
-      if (t.text().startsWith(".")) {
-        return -1; // Directive line
-      }
-      if (t.text().endsWith(":") || t.type == TokenType.TOK_COLON) {
-        continue;
-      }
-      // If previous token was an identifier and this is a colon, it was a label
-      if (i + 1 < tokens.size() && tokens.get(i + 1).type == TokenType.TOK_COLON) {
-        i++; // skip label and colon
-        continue;
-      }
-      return i;
-    }
-    return -1;
   }
 
   private boolean isBranchOrLoop(String mnemonic) {

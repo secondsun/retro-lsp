@@ -158,7 +158,10 @@ public class RetroLspMcpServer implements AutoCloseable {
 
   /** Constructs an MCP server attached to the given transport and required workspace root. */
   public RetroLspMcpServer(ServerMcpTransport transport, Path workspaceRoot) {
-    this(new ProjectService(new FileService(), new SymbolService()), transport, workspaceRoot);
+    this(
+        new ProjectService(new FileService(), new SymbolService(), workspaceRoot),
+        transport,
+        workspaceRoot);
   }
 
   /**
@@ -195,6 +198,10 @@ public class RetroLspMcpServer implements AutoCloseable {
       }
     }
     this.fileWatcher = watcher;
+    if (this.fileWatcher != null) {
+      this.projectService.setDirectoryIndexedListener(
+          dir -> this.fileWatcher.registerDirectory(dir));
+    }
 
     if (transport != null) {
       Tool diagnosticsTool =
@@ -355,26 +362,7 @@ public class RetroLspMcpServer implements AutoCloseable {
    * @param uri URI to validate
    */
   public void validateUriWithinWorkspace(URI uri) {
-    if (uri == null) {
-      return;
-    }
-    String uriStr = uri.toString();
-    if (uriStr.startsWith("file:///snippet")
-        || !uri.isAbsolute()
-        || !"file".equalsIgnoreCase(uri.getScheme())) {
-      return;
-    }
-    if (workspaceRoot != null) {
-      Path target = Path.of(uri).toAbsolutePath().normalize();
-      if (!target.startsWith(workspaceRoot)) {
-        throw new SecurityException(
-            "Access denied: URI '"
-                + uri
-                + "' is outside the configured workspace boundary: '"
-                + workspaceRoot
-                + "'");
-      }
-    }
+    projectService.validateUriWithinWorkspace(uri);
   }
 
   /**

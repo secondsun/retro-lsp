@@ -37,27 +37,17 @@ public class SfxMacroExpanderTool {
 
   public MacroExpandResult expand(String code, String uriStr) {
     URI uri = uriStr != null ? URI.create(uriStr) : null;
-    TokenizedFile tokenized;
-    int originalLines;
+    TokenizedFile tokenized = projectService.resolveFile(uri, code);
 
-    if (code != null && !code.isBlank()) {
-      if (uri != null) {
-        projectService.updateFileContents(uri, code);
-        tokenized = projectService.getFileContents(uri);
-      } else {
-        CA65Scanner scanner = new CA65Scanner();
-        tokenized = scanner.tokenize(code);
-      }
-      originalLines = code.split("\r?\n", -1).length;
-    } else if (uri != null) {
-      tokenized = projectService.getFileContents(uri);
-      if (tokenized == null || tokenized == TokenizedFile.EMPTY) {
+    if (tokenized == null || tokenized.isEmpty()) {
+      if (uri != null && (code == null || code.isBlank())) {
         throw new IllegalArgumentException("File not found in workspace: " + uri);
       }
-      originalLines = tokenized.textLines();
-    } else {
       return new MacroExpandResult("", 0, 0);
     }
+
+    int originalLines =
+        (code != null && !code.isBlank()) ? code.split("\r?\n", -1).length : tokenized.textLines();
 
     CA65Scanner scanner = new CA65Scanner();
     CA65MacroExpander expander = new CA65MacroExpander(fileService, scanner);

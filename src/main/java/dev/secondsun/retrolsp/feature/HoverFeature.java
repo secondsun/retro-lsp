@@ -72,7 +72,7 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
     }
 
     int col = Math.max(0, params.position.character);
-    Optional<Token> maybeToken = Util.getTokenAt(lineTokens, col);
+    Optional<Token> maybeToken = fileContent.getTokenAt(params.position.line, col);
 
     if (maybeToken.isEmpty()) {
       return Optional.of(new Hover(new ArrayList<>()));
@@ -140,8 +140,11 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
     }
 
     // 4. Extracted symbol documentation
-    String doc = symbolService.getDocumentation(tokenText, docUri, line);
-    if (doc == null || doc.isBlank()) {
+    String doc =
+        (projectService != null)
+            ? projectService.resolveDocumentation(tokenText, docUri, line)
+            : symbolService.getDocumentation(tokenText, docUri, line);
+    if ((doc == null || doc.isBlank()) && projectService == null) {
       doc = symbolService.getDocumentation(tokenText);
     }
 
@@ -167,8 +170,11 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
     if (functionName == null || functionName.isBlank()) {
       return null;
     }
-    var defLoc = symbolService.getLocation(functionName, uri, line);
-    if (defLoc == null) {
+    var defLoc =
+        (projectService != null)
+            ? projectService.resolveLocation(functionName, uri, line)
+            : symbolService.getLocation(functionName, uri, line);
+    if (defLoc == null && projectService == null) {
       defLoc = symbolService.getLocation(functionName);
     }
     if (defLoc == null || defLoc.filename() == null) {
@@ -182,7 +188,7 @@ public class HoverFeature implements Feature<TextDocumentPositionParams, Hover> 
       if (targetFile == null && projectService != null) {
         targetFile = projectService.getFileContents(defLoc.filename());
       }
-      if (targetFile == null || targetFile == TokenizedFile.EMPTY) {
+      if (targetFile == null || targetFile.isEmpty()) {
         targetFile = fileService.readLines(defLoc.filename());
       }
       if (targetFile != null && defLoc.line() >= 0 && defLoc.line() < targetFile.textLines()) {

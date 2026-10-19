@@ -5,20 +5,12 @@ import dev.secondsun.lsp.LanguageClient;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.PublishDiagnosticsParams;
 import dev.secondsun.lsp.Range;
-import dev.secondsun.retro.util.CA65Scanner;
 import dev.secondsun.retro.util.ProjectService;
-import dev.secondsun.retro.util.Token;
 import dev.secondsun.retro.util.diagnostic.SyntaxDiagnostic;
 import dev.secondsun.retro.util.diagnostic.SyntaxValidator;
 import dev.secondsun.retro.util.vo.TokenizedFile;
-import dev.secondsun.retro.util.vo.Tokens;
 import dev.secondsun.retrolsp.mcp.tools.SfxInvariantAuditor;
-import dev.secondsun.sfxoptimizer.graphbuilder.CA65Grapher;
-import dev.secondsun.sfxoptimizer.graphnode.CodeGraph;
-import dev.secondsun.sfxoptimizer.graphnode.CodeNode;
-import dev.secondsun.sfxoptimizer.macro.CA65MacroExpander;
 import dev.secondsun.sfxoptimizer.stack.StackDepthTracker;
-import dev.secondsun.sfxoptimizer.stack.StackViolation;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -67,7 +59,7 @@ public class DiagnosticCoordinator {
   /** Audits assembly source code or document URI and returns a unified DiagnosticResult. */
   public DiagnosticResult auditResult(String code, String uriStr) {
     TokenizedFile file = resolveFile(code, uriStr);
-    if (file == null || file == TokenizedFile.EMPTY) {
+    if (file == null || file.isEmpty()) {
       return new DiagnosticResult(true, List.of(), "Empty code: no diagnostics audited.");
     }
     List<DiagnosticRecord> violations = audit(file);
@@ -80,32 +72,17 @@ public class DiagnosticCoordinator {
   }
 
   /** Audits a TokenizedFile and collects diagnostic records across all 3 layers. */
-  public List<DiagnosticRecord> audit(TokenizedFile file) {
-    if (file == null || file == TokenizedFile.EMPTY) {
+  /** Audits a TokenizedFile and collects structured SyntaxDiagnostics across all 3 layers. */
+  public List<SyntaxDiagnostic> auditDiagnostics(TokenizedFile file) {
+    if (file == null || file.isEmpty()) {
       return List.of();
     }
 
-    List<DiagnosticRecord> records = new ArrayList<>();
+    List<SyntaxDiagnostic> diagnostics = new ArrayList<>();
 
     // Layer 1: Syntax & Language Invariants (Block balancing, arity, duplicate symbols)
     try {
-      List<SyntaxDiagnostic> syntaxErrors = syntaxValidator.validate(file);
-      for (SyntaxDiagnostic sd : syntaxErrors) {
-        DiagnosticSeverity sev =
-            sd.severity() == dev.secondsun.retro.util.diagnostic.DiagnosticSeverity.ERROR
-                ? DiagnosticSeverity.ERROR
-                : DiagnosticSeverity.WARNING;
-        int length = Math.max(1, sd.columnEnd() - sd.columnStart());
-        records.add(
-            new DiagnosticRecord(
-                sd.line(),
-                sd.columnStart() + 1,
-                length,
-                sd.code(),
-                DiagnosticCategory.SYNTAX,
-                sev,
-                sd.message()));
-      }
+      diagnostics.addAll(syntaxValidator.validate(file));
     } catch (Exception e) {
       LOG.log(Level.WARNING, "Syntax validation error: " + e.getMessage(), e);
     }
@@ -113,101 +90,32 @@ public class DiagnosticCoordinator {
     // Layer 2: FX3 Hardware Invariants (8-NOP settling, 16-bit word alignment, no merge, modal
     // lifetimes)
     try {
-      SfxInvariantAuditor.AuditResult invResult = invariantAuditor.audit(file);
-      for (SfxInvariantAuditor.InvariantViolation iv : invResult.violations()) {
-        DiagnosticSeverity sev =
-            iv.severity() == SfxInvariantAuditor.Severity.ERROR
-                ? DiagnosticSeverity.ERROR
-                : DiagnosticSeverity.WARNING;
-        records.add(
-            new DiagnosticRecord(
-                iv.line(),
-                1,
-                1,
-                iv.rule(),
-                DiagnosticCategory.HARDWARE_INVARIANT,
-                sev,
-                iv.message()));
-      }
+      diagnostics.addAll(invariantAuditor.auditDiagnostics(file));
     } catch (Exception e) {
       LOG.log(Level.WARNING, "Hardware invariant audit error: " + e.getMessage(), e);
     }
 
     // Layer 3: Stack Displacement & Calling Convention Invariants
     try {
-      TokenizedFile expanded = new CA65MacroExpander().expand(file);
-      URI effectiveUri =
-          expanded.uri() != null
-              ? expanded.uri()
-              : (file.uri() != null ? file.uri() : URI.create("file:///snippet.s"));
-      expanded.uri = effectiveUri;
-
-      dev.secondsun.retro.util.SymbolService symbolService =
-          new dev.secondsun.retro.util.SymbolService();
-      symbolService.extractDefinitions(expanded);
-
-      dev.secondsun.retro.util.FileService fileService =
-          new dev.secondsun.retro.util.FileService() {
-            @Override
-            public TokenizedFile readLines(URI targetUri) {
-              if (targetUri != null && targetUri.equals(effectiveUri)) {
-                return expanded;
-              }
-              TokenizedFile f = projectService.getFileContents(targetUri);
-              if (f != null && f != TokenizedFile.EMPTY) {
-                return f;
-              }
-              try {
-                return super.readLines(targetUri);
-              } catch (java.io.IOException e) {
-                return TokenizedFile.EMPTY;
-              }
-            }
-          };
-
-      CA65Grapher grapher = new CA65Grapher(symbolService, fileService);
-      CodeGraph graph = grapher.graph(expanded, 0);
-      List<StackViolation> stackViolations = new ArrayList<>(stackTracker.auditStack(graph));
-
-      // Audit any functions defined in the file
-      for (int i = 0; i < expanded.textLines(); i++) {
-        Tokens lineToks = expanded.getLine(i);
-        if (lineToks != null && !lineToks.tokens().isEmpty()) {
-          Token first = lineToks.tokens().get(0);
-          if (first.type == dev.secondsun.retro.util.TokenType.TOK_FUNCTION
-              || "function".equalsIgnoreCase(first.text())) {
-            if (lineToks.tokens().size() >= 2) {
-              String fnName = lineToks.tokens().get(1).text();
-              try {
-                CodeNode.FunctionStart fnNode = grapher.graphFunction(fnName);
-                if (fnNode != null) {
-                  stackViolations.addAll(stackTracker.track(fnNode, false).getViolations());
-                }
-              } catch (Throwable ignore) {
-              }
-            }
-          }
-        }
-      }
-
-      for (StackViolation sv : stackViolations) {
-        records.add(
-            new DiagnosticRecord(
-                Math.max(1, sv.getLine()),
-                1,
-                1,
-                sv.getRule(),
-                DiagnosticCategory.STACK_INVARIANT,
-                DiagnosticSeverity.ERROR,
-                sv.getMessage()));
-      }
+      diagnostics.addAll(
+          stackTracker.auditFile(
+              file,
+              projectService,
+              projectService.getFileService(),
+              projectService.getSymbolService()));
     } catch (Throwable t) {
       LOG.log(Level.FINE, "Stack displacement tracking skipped: " + t.getMessage(), t);
     }
 
-    records.sort(
-        Comparator.comparingInt(DiagnosticRecord::line).thenComparingInt(DiagnosticRecord::column));
-    return records;
+    diagnostics.sort(
+        Comparator.comparingInt(SyntaxDiagnostic::line)
+            .thenComparingInt(SyntaxDiagnostic::columnStart));
+    return diagnostics;
+  }
+
+  /** Audits a TokenizedFile and collects diagnostic records across all 3 layers. */
+  public List<DiagnosticRecord> audit(TokenizedFile file) {
+    return auditDiagnostics(file).stream().map(DiagnosticRecord::from).toList();
   }
 
   /** Collects LSP Diagnostic objects for a given workspace document URI. */
@@ -216,26 +124,27 @@ public class DiagnosticCoordinator {
       return List.of();
     }
     TokenizedFile file = projectService.getFileContents(uri);
-    if (file == null || file == TokenizedFile.EMPTY) {
+    if (file == null || file.isEmpty()) {
       return List.of();
     }
-    List<DiagnosticRecord> records = audit(file);
+    List<SyntaxDiagnostic> diagnostics = auditDiagnostics(file);
     List<Diagnostic> lspDiagnostics = new ArrayList<>();
-    for (DiagnosticRecord rec : records) {
+    for (SyntaxDiagnostic sd : diagnostics) {
       Diagnostic diag = new Diagnostic();
-      int line = Math.max(0, rec.line() - 1);
-      int col = Math.max(0, rec.column() - 1);
-      int endCol = col + Math.max(1, rec.length());
+      int line = Math.max(0, sd.line() - 1);
+      int col = Math.max(0, sd.columnStart());
+      int endCol = Math.max(col + 1, sd.columnEnd());
       diag.range = new Range(new Position(line, col), new Position(line, endCol));
       diag.severity =
-          switch (rec.severity()) {
+          switch (sd.severity()) {
             case ERROR -> dev.secondsun.lsp.DiagnosticSeverity.Error;
             case WARNING -> dev.secondsun.lsp.DiagnosticSeverity.Warning;
             case INFO -> dev.secondsun.lsp.DiagnosticSeverity.Information;
+            case HINT -> dev.secondsun.lsp.DiagnosticSeverity.Hint;
           };
-      diag.code = rec.rule();
+      diag.code = sd.code();
       diag.source = "retroca65";
-      diag.message = rec.message();
+      diag.message = sd.message();
       lspDiagnostics.add(diag);
     }
     return lspDiagnostics;
@@ -267,23 +176,10 @@ public class DiagnosticCoordinator {
 
   private TokenizedFile resolveFile(String code, String uriStr) {
     URI uri = uriStr != null ? URI.create(uriStr) : null;
-    if (code != null && !code.isBlank()) {
-      if (uri != null) {
-        projectService.updateFileContents(uri, code);
-        return projectService.getFileContents(uri);
-      } else {
-        CA65Scanner scanner = new CA65Scanner();
-        TokenizedFile tf = scanner.tokenize(code);
-        tf.uri = URI.create("file:///snippet.s");
-        return tf;
-      }
-    } else if (uri != null) {
-      TokenizedFile file = projectService.getFileContents(uri);
-      if (file == null || file == TokenizedFile.EMPTY) {
-        throw new IllegalArgumentException("File not found in workspace: " + uri);
-      }
-      return file;
+    TokenizedFile file = projectService.resolveFile(uri, code);
+    if ((file == null || file.isEmpty()) && uri != null && (code == null || code.isBlank())) {
+      throw new IllegalArgumentException("File not found in workspace: " + uri);
     }
-    return TokenizedFile.EMPTY;
+    return file != null ? file : TokenizedFile.EMPTY;
   }
 }

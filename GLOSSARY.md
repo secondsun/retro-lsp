@@ -19,3 +19,12 @@ _Avoid_: Directory poller, file listener
 **Workspace Sandbox**:
 The filesystem boundary enforced around the required workspace path preventing tool access to external directories.
 _Avoid_: Chroot, jail, restricted folder
+
+**Diagnostic Coordinator**:
+The subsystem coordinating lexical syntax validation, hardware invariant verification, and static stack depth tracking to publish LSP diagnostics and respond to MCP audits.
+_Avoid_: Error reporter, problem manager
+
+**Stack Displacement Invariant**:
+The invariant requiring net stack pointer alteration (Δ_SP) across a function invocation to equal zero upon return and match across all control-flow join points.
+_Avoid_: Stack leak, frame discrepancy
+

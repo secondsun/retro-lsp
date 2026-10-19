@@ -47,7 +47,7 @@ public class Main {
       }
     } else {
       LOG.info("Starting");
-      LSP.connect((langClient) -> new CA65LanguageServer(), System.in, System.out);
+      LSP.connect(CA65LanguageServer::new, System.in, System.out);
     }
   }
 }

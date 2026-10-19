@@ -47,14 +47,14 @@ public class RetroLspMcpServer implements AutoCloseable {
   private static Path currentLogFile;
   private static FileHandler currentFileHandler;
 
-  private static final String AUDIT_INVARIANTS_SCHEMA =
+  private static final String AUDIT_DIAGNOSTICS_SCHEMA =
       """
       {
         "type": "object",
         "properties": {
           "code": {
             "type": "string",
-            "description": "SuperFX CA65 assembly code to audit (optional if uri is provided)"
+            "description": "SuperFX CA65 assembly code to audit for syntax errors, hardware invariants, and stack displacement invariants (optional if uri is provided)"
           },
           "uri": {
             "type": "string",
@@ -63,6 +63,8 @@ public class RetroLspMcpServer implements AutoCloseable {
         }
       }
       """;
+
+  private static final String AUDIT_INVARIANTS_SCHEMA = AUDIT_DIAGNOSTICS_SCHEMA;
 
   private static final String EXPAND_MACRO_SCHEMA =
       """
@@ -131,6 +133,7 @@ public class RetroLspMcpServer implements AutoCloseable {
   private final ObjectMapper objectMapper;
   private final ProjectService projectService;
   private final Path workspaceRoot;
+  private final dev.secondsun.retrolsp.diagnostic.DiagnosticCoordinator diagnosticCoordinator;
   private final SfxInvariantAuditor invariantAuditor;
   private final SfxMacroExpanderTool macroExpander;
   private final SfxSymbolLookupTool symbolLookup;
@@ -170,6 +173,8 @@ public class RetroLspMcpServer implements AutoCloseable {
     this.objectMapper = new ObjectMapper();
     this.projectService = Objects.requireNonNull(projectService);
     this.workspaceRoot = workspaceRoot != null ? workspaceRoot.toAbsolutePath().normalize() : null;
+    this.diagnosticCoordinator =
+        new dev.secondsun.retrolsp.diagnostic.DiagnosticCoordinator(this.projectService);
     this.invariantAuditor = new SfxInvariantAuditor(this.projectService);
     this.macroExpander = new SfxMacroExpanderTool(this.projectService);
     this.symbolLookup = new SfxSymbolLookupTool(this.projectService);
@@ -190,10 +195,16 @@ public class RetroLspMcpServer implements AutoCloseable {
     this.fileWatcher = watcher;
 
     if (transport != null) {
+      Tool diagnosticsTool =
+          new Tool(
+              "sfx_audit_diagnostics",
+              "Audits SuperFX assembly for unified diagnostics: syntax errors (block balancing, instruction/macro arity, duplicate symbols), hardware invariants (8-NOP settling before 'stop', 16-bit word aligned 'ldw'/'stw', absence of hardware 'MERGE' on FX3, modal lifetimes), and stack displacement invariants (return leak, divergent branches).",
+              AUDIT_DIAGNOSTICS_SCHEMA);
+
       Tool auditTool =
           new Tool(
               "sfx_audit_invariants",
-              "Audits SuperFX assembly for hardware invariants: 8-NOP pipeline settling before 'stop', 16-bit word aligned 'ldw'/'stw', absence of hardware 'MERGE' on FX3, and modal instruction lifetime ('with'/'to'/'from').",
+              "Alias for sfx_audit_diagnostics. Audits SuperFX assembly for unified diagnostics including hardware invariants, syntax errors, and stack displacement.",
               AUDIT_INVARIANTS_SCHEMA);
 
       Tool expandTool =
@@ -220,6 +231,7 @@ public class RetroLspMcpServer implements AutoCloseable {
           McpServer.sync(transport)
               .serverInfo("retro-lsp", "0.1.0-PROTOTYPE")
               .capabilities(capabilities)
+              .tool(diagnosticsTool, args -> executeTool("sfx_audit_diagnostics", args))
               .tool(auditTool, args -> executeTool("sfx_audit_invariants", args))
               .tool(expandTool, args -> executeTool("sfx_expand_macro", args))
               .tool(lookupTool, args -> executeTool("sfx_lookup_symbol", args))
@@ -328,6 +340,10 @@ public class RetroLspMcpServer implements AutoCloseable {
     return workspaceRoot;
   }
 
+  public dev.secondsun.retrolsp.diagnostic.DiagnosticCoordinator getDiagnosticCoordinator() {
+    return diagnosticCoordinator;
+  }
+
   /**
    * Validates that the provided URI resides within the configured workspace root boundary. Throws
    * {@link SecurityException} if access is outside boundary.
@@ -414,9 +430,9 @@ public class RetroLspMcpServer implements AutoCloseable {
 
       Object resultData =
           switch (name) {
-            case "sfx_audit_invariants" -> {
+            case "sfx_audit_diagnostics", "sfx_audit_invariants" -> {
               String code = (String) args.get("code");
-              yield invariantAuditor.audit(code, uriStr);
+              yield diagnosticCoordinator.auditResult(code, uriStr);
             }
             case "sfx_expand_macro" -> {
               String code = (String) args.get("code");

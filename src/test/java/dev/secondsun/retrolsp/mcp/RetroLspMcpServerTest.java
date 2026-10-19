@@ -50,6 +50,27 @@ public class RetroLspMcpServerTest {
   }
 
   @Test
+  public void testAuditDiagnosticsToolViaServer() throws Exception {
+    String code =
+        """
+        function unclosed
+            nop
+        """;
+    CallToolResult result = server.executeTool("sfx_audit_diagnostics", Map.of("code", code));
+    assertNotNull(result);
+    assertFalse(result.isError());
+
+    TextContent content = (TextContent) result.content().get(0);
+    JsonNode json = objectMapper.readTree(content.text());
+    assertFalse(json.get("valid").asBoolean());
+    assertTrue(json.get("violations").size() > 0);
+    JsonNode firstViolation = json.get("violations").get(0);
+    assertEquals("UNCLOSED_BLOCK", firstViolation.get("rule").asText());
+    assertEquals("SYNTAX", firstViolation.get("category").asText());
+    assertEquals("ERROR", firstViolation.get("severity").asText());
+  }
+
+  @Test
   public void testExpandMacroToolViaServer() throws Exception {
     String code =
         """

@@ -8,12 +8,14 @@ import dev.secondsun.lsp.FileChangeType;
 import dev.secondsun.lsp.Hover;
 import dev.secondsun.lsp.InitializeParams;
 import dev.secondsun.lsp.InitializeResult;
+import dev.secondsun.lsp.LanguageClient;
 import dev.secondsun.lsp.LanguageServer;
 import dev.secondsun.lsp.Location;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.retro.util.FileService;
 import dev.secondsun.retro.util.ProjectService;
 import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retrolsp.diagnostic.DiagnosticCoordinator;
 import dev.secondsun.retrolsp.feature.CompletionFeature;
 import dev.secondsun.retrolsp.feature.DirectiveCompletionFeature;
 import dev.secondsun.retrolsp.feature.DocumentLinkFeature;
@@ -40,9 +42,8 @@ import java.util.logging.Logger;
 public class CA65LanguageServer extends LanguageServer {
 
   private final FileService fileService;
-
-  // TODO Actually make use of language client
-  // private final LanguageClient client;
+  private final LanguageClient client;
+  private final DiagnosticCoordinator diagnosticCoordinator;
   private URI workspaceRoot;
   private CompletableFuture<Void> indexingFuture = CompletableFuture.completedFuture(null);
 
@@ -61,18 +62,23 @@ public class CA65LanguageServer extends LanguageServer {
 
   private static final Logger LOG = Logger.getLogger(CA65LanguageServer.class.getName());
 
-  /**
-   * Constructs a new {@code CA65LanguageServer} instance and initializes default services and LSP
-   * features.
-   */
+  /** Constructs a new {@code CA65LanguageServer} instance with null client. */
   public CA65LanguageServer() {
+    this(null);
+  }
 
+  /**
+   * Constructs a new {@code CA65LanguageServer} instance with the given LanguageClient.
+   *
+   * @param client LSP client for publishing notifications and diagnostics
+   */
+  public CA65LanguageServer(LanguageClient client) {
     try {
-
+      this.client = client;
       this.fileService = new FileService();
-
       this.symbolService = new SymbolService();
       this.projectService = new ProjectService(fileService, symbolService);
+      this.diagnosticCoordinator = new DiagnosticCoordinator(this.projectService, this.client);
       this.hoverFeature = new HoverFeature(fileService, symbolService, projectService);
       this.documentLinkFeature = new DocumentLinkFeature(this.fileService);
       this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature(this.symbolService);
@@ -90,6 +96,14 @@ public class CA65LanguageServer extends LanguageServer {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+  }
+
+  public DiagnosticCoordinator getDiagnosticCoordinator() {
+    return diagnosticCoordinator;
+  }
+
+  public LanguageClient getClient() {
+    return client;
   }
 
   @Override
@@ -162,6 +176,7 @@ public class CA65LanguageServer extends LanguageServer {
       } else {
         projectService.refreshFileContents(params.textDocument.uri);
       }
+      diagnosticCoordinator.publishDiagnostics(params.textDocument.uri);
     }
   }
 
@@ -172,10 +187,12 @@ public class CA65LanguageServer extends LanguageServer {
         var lastChange = params.contentChanges.get(params.contentChanges.size() - 1);
         if (lastChange != null && lastChange.text != null) {
           projectService.updateFileContents(params.textDocument.uri, lastChange.text);
+          diagnosticCoordinator.publishDiagnostics(params.textDocument.uri);
           return;
         }
       }
       projectService.refreshFileContents(params.textDocument.uri);
+      diagnosticCoordinator.publishDiagnostics(params.textDocument.uri);
     }
   }
 
@@ -183,12 +200,15 @@ public class CA65LanguageServer extends LanguageServer {
   public void didSaveTextDocument(dev.secondsun.lsp.DidSaveTextDocumentParams params) {
     if (params != null && params.textDocument != null && params.textDocument.uri != null) {
       projectService.refreshFileContents(params.textDocument.uri);
+      diagnosticCoordinator.publishDiagnostics(params.textDocument.uri);
     }
   }
 
   @Override
   public void didCloseTextDocument(dev.secondsun.lsp.DidCloseTextDocumentParams params) {
-    // no-op
+    if (params != null && params.textDocument != null && params.textDocument.uri != null) {
+      diagnosticCoordinator.clearDiagnostics(params.textDocument.uri);
+    }
   }
 
   @Override

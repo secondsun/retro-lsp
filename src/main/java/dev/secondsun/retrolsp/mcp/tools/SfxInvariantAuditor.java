@@ -68,6 +68,13 @@ public class SfxInvariantAuditor {
     } else {
       return new AuditResult(true, List.of(), "Empty code: no invariants audited.");
     }
+    return audit(file);
+  }
+
+  public AuditResult audit(TokenizedFile file) {
+    if (file == null || file == TokenizedFile.EMPTY) {
+      return new AuditResult(true, List.of(), "Empty code: no invariants audited.");
+    }
 
     List<InvariantViolation> violations = new ArrayList<>();
     int consecutiveNops = 0;

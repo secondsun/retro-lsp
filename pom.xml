@@ -7,7 +7,7 @@
 
   <groupId>dev.secondsun</groupId>
   <artifactId>retro-lsp</artifactId>
-  <version>0.2.0-PROTOTYPE</version>
+  <version>0.3.0-PROTOTYPE</version>
 
   <name>retro-lsp</name>
   <url>https://github.com/secondsun/retro-lsp</url>
@@ -31,7 +31,7 @@
     <connection>scm:git:git://github.com/secondsun/retro-lsp.git</connection>
     <developerConnection>scm:git:ssh://github.com:secondsun/retro-lsp.git</developerConnection>
     <url>http://github.com/secondsun/retro-lsp/tree/prototype</url>
-    <tag>v0.2.0</tag>
+    <tag>v0.3.0</tag>
   </scm>
 
   <distributionManagement>
@@ -95,12 +95,12 @@
     <dependency>
       <groupId>dev.secondsun</groupId>
       <artifactId>retro-common</artifactId>
-      <version>1.7.0</version>
+      <version>1.8.0</version>
     </dependency>
     <dependency>
       <groupId>dev.secondsun</groupId>
       <artifactId>sfx-optimizer</artifactId>
-      <version>0.5.0</version>
+      <version>0.6.0</version>
     </dependency>
 
     <dependency>

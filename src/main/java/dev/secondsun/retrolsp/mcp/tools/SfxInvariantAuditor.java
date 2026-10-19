@@ -29,7 +29,7 @@ public class SfxInvariantAuditor {
   private static final Pattern DEC_LITERAL = Pattern.compile("\\b(\\d+)\\b");
   private static final Pattern BIN_LITERAL = Pattern.compile("%([01]+)");
 
-  private record PendingModal(String opcode, int line) {}
+  private record PendingModal(String opcode, int line, boolean inDelaySlot) {}
 
   private final dev.secondsun.retro.util.ProjectService projectService;
 
@@ -77,6 +77,7 @@ public class SfxInvariantAuditor {
     }
 
     List<InvariantViolation> violations = new ArrayList<>();
+    String lastMnemonic = null;
     int consecutiveNops = 0;
     PendingModal pendingModal = null;
 
@@ -94,17 +95,6 @@ public class SfxInvariantAuditor {
       // Check if line defines a label
       boolean isLabelOnly = isLabelDefinitionLine(tokens, rawLine);
       if (isLabelOnly) {
-        if (pendingModal != null) {
-          violations.add(
-              new InvariantViolation(
-                  pendingModal.line(),
-                  "DANGLING_MODAL_PREFIX",
-                  Severity.ERROR,
-                  String.format(
-                      "Modal instruction '%s' on line %d has no valid target instruction (followed by label on line %d). Modal prefixes apply to the single immediately following instruction only.",
-                      pendingModal.opcode(), pendingModal.line(), lineNum)));
-          pendingModal = null;
-        }
         consecutiveNops = 0; // Labels break straight-line NOP settling
         continue;
       }
@@ -168,11 +158,12 @@ public class SfxInvariantAuditor {
                         pendingModal.opcode(), pendingModal.line(), mnemonic, lineNum)));
           }
         }
-        pendingModal = new PendingModal(mnemonic, lineNum);
+        boolean inDelaySlot = isBranchOrLoop(lastMnemonic);
+        pendingModal = new PendingModal(mnemonic, lineNum, inDelaySlot);
       } else {
         if (pendingModal != null) {
           // Check if instruction is a terminal/control instruction where modal is invalid
-          if (isControlInstruction(mnemonic)) {
+          if (isControlInstruction(mnemonic) && !pendingModal.inDelaySlot()) {
             violations.add(
                 new InvariantViolation(
                     pendingModal.line(),
@@ -186,10 +177,12 @@ public class SfxInvariantAuditor {
           pendingModal = null;
         }
       }
+
+      lastMnemonic = mnemonic;
     }
 
     // Trailing dangling modal prefix at end of code
-    if (pendingModal != null) {
+    if (pendingModal != null && !pendingModal.inDelaySlot()) {
       violations.add(
           new InvariantViolation(
               pendingModal.line(),
@@ -211,6 +204,9 @@ public class SfxInvariantAuditor {
 
   private boolean isLabelDefinitionLine(List<Token> tokens, String rawLine) {
     if (tokens.isEmpty()) return false;
+    if (tokens.size() == 1 && tokens.get(0).text().endsWith(":")) {
+      return true;
+    }
     if (rawLine.endsWith(":")) {
       return true;
     }
@@ -234,6 +230,28 @@ public class SfxInvariantAuditor {
       return i;
     }
     return -1;
+  }
+
+  private boolean isBranchOrLoop(String mnemonic) {
+    if (mnemonic == null) return false;
+    return switch (mnemonic) {
+      case "loop",
+          "bra",
+          "beq",
+          "bne",
+          "bge",
+          "blt",
+          "bmi",
+          "bpl",
+          "bcc",
+          "bcs",
+          "bvc",
+          "bvs",
+          "jmp",
+          "ljmp" ->
+          true;
+      default -> false;
+    };
   }
 
   private boolean isControlInstruction(String mnemonic) {

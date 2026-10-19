@@ -131,6 +131,15 @@ public class CA65LanguageServer extends LanguageServer {
     for (Feature<?, ?> feature : features) {
       feature.initialize(initializeData);
     }
+
+    var textDocumentSync = new JsonObject();
+    textDocumentSync.addProperty("openClose", true);
+    textDocumentSync.addProperty("change", 1); // 1 = Full sync
+    var saveOptions = new JsonObject();
+    saveOptions.addProperty("includeText", true);
+    textDocumentSync.add("save", saveOptions);
+    initializeData.add("textDocumentSync", textDocumentSync);
+
     return new InitializeResult(initializeData);
   }
 
@@ -171,7 +180,7 @@ public class CA65LanguageServer extends LanguageServer {
   @Override
   public void didOpenTextDocument(dev.secondsun.lsp.DidOpenTextDocumentParams params) {
     if (params != null && params.textDocument != null && params.textDocument.uri != null) {
-      if (params.textDocument.text != null && !params.textDocument.text.isEmpty()) {
+      if (params.textDocument.text != null) {
         projectService.updateFileContents(params.textDocument.uri, params.textDocument.text);
       } else {
         projectService.refreshFileContents(params.textDocument.uri);

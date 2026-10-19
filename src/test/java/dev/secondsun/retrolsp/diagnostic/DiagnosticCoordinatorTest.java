@@ -215,4 +215,78 @@ public class DiagnosticCoordinatorTest {
     assertEquals(uri, params.uri);
     assertTrue(params.diagnostics.isEmpty());
   }
+
+  @Test
+  public void testServerEndToEndTextDocumentSyncAndDiagnostics() {
+    TestLanguageClient serverClient = new TestLanguageClient();
+    dev.secondsun.retrolsp.CA65LanguageServer server =
+        new dev.secondsun.retrolsp.CA65LanguageServer(serverClient);
+
+    // 1. Verify textDocumentSync capability advertised in InitializeResult
+    dev.secondsun.lsp.InitializeParams initParams = new dev.secondsun.lsp.InitializeParams();
+    dev.secondsun.lsp.InitializeResult initResult = server.initialize(initParams);
+    assertNotNull(initResult.capabilities);
+    assertTrue(initResult.capabilities.has("textDocumentSync"));
+    var syncObj = initResult.capabilities.getAsJsonObject("textDocumentSync");
+    assertTrue(syncObj.get("openClose").getAsBoolean());
+    assertEquals(1, syncObj.get("change").getAsInt());
+
+    // 2. Open file missing endfunction -> should publish UNCLOSED_BLOCK error
+    URI docUri = URI.create("file:///test_unclosed.s");
+    dev.secondsun.lsp.DidOpenTextDocumentParams openParams =
+        new dev.secondsun.lsp.DidOpenTextDocumentParams();
+    openParams.textDocument = new dev.secondsun.lsp.TextDocumentItem();
+    openParams.textDocument.uri = docUri;
+    openParams.textDocument.languageId = "retroca65";
+    openParams.textDocument.text =
+        """
+        function my_func
+            nop
+        """;
+    server.didOpenTextDocument(openParams);
+
+    assertEquals(1, serverClient.published.size());
+    PublishDiagnosticsParams openDiag = serverClient.published.get(0);
+    assertEquals(docUri, openDiag.uri);
+    assertTrue(
+        openDiag.diagnostics.stream().anyMatch(d -> "UNCLOSED_BLOCK".equals(d.code)),
+        "Expected UNCLOSED_BLOCK diagnostic on open");
+
+    // 3. Edit file to add endfunction -> should clear errors live
+    dev.secondsun.lsp.DidChangeTextDocumentParams changeParams =
+        new dev.secondsun.lsp.DidChangeTextDocumentParams();
+    changeParams.textDocument = new dev.secondsun.lsp.VersionedTextDocumentIdentifier();
+    changeParams.textDocument.uri = docUri;
+    dev.secondsun.lsp.TextDocumentContentChangeEvent changeEvent =
+        new dev.secondsun.lsp.TextDocumentContentChangeEvent();
+    changeEvent.text =
+        """
+        function my_func
+            nop
+        endfunction
+        """;
+    changeParams.contentChanges = List.of(changeEvent);
+    server.didChangeTextDocument(changeParams);
+
+    assertEquals(2, serverClient.published.size());
+    PublishDiagnosticsParams changeDiag = serverClient.published.get(1);
+    assertEquals(docUri, changeDiag.uri);
+    assertTrue(
+        changeDiag.diagnostics.isEmpty(), "Expected all diagnostics cleared after closing block");
+  }
+
+  @Test
+  public void testGsuSqrtFileHasNoDiagnostics() throws Exception {
+    var path = java.nio.file.Path.of("../snes-sfx-demo/X-GSU/gsu_maths/gsu_sqrt.i");
+    if (java.nio.file.Files.exists(path)) {
+      String code = java.nio.file.Files.readString(path);
+      DiagnosticResult result = coordinator.auditResult(code, path.toUri().toString());
+      var errors =
+          result.violations().stream()
+              .filter(
+                  v -> v.severity() == dev.secondsun.retrolsp.diagnostic.DiagnosticSeverity.ERROR)
+              .toList();
+      assertTrue(errors.isEmpty(), "Expected 0 errors in gsu_sqrt.i, found: " + errors);
+    }
+  }
 }

@@ -95,6 +95,9 @@ function checkResponses() {
           if (!caps.completionProvider) {
             throw new Error('Expected completionProvider capability to be defined');
           }
+          if (!caps.textDocumentSync) {
+            throw new Error('Expected textDocumentSync capability to be defined');
+          }
 
           console.log('✓ All capability assertions passed.');
           passed = true;

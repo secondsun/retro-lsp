@@ -173,7 +173,23 @@ public class SfxInvariantAuditorTest {
   }
 
   @Test
-  public void testDanglingModalPrefixFollowedByLabelOrStop() {
+  public void testDanglingModalPrefixFollowedByStop() {
+    String code =
+        """
+        from r1
+        stop
+        """;
+    AuditResult result = auditor.audit(code);
+    var v =
+        result.violations().stream()
+            .filter(violation -> violation.rule().equals("DANGLING_MODAL_PREFIX"))
+            .findFirst();
+    assertTrue(v.isPresent());
+    assertEquals(Severity.ERROR, v.get().severity());
+  }
+
+  @Test
+  public void testModalPrefixWithInterveningLabelValid() {
     String code =
         """
         from r1
@@ -185,7 +201,38 @@ public class SfxInvariantAuditorTest {
         result.violations().stream()
             .filter(violation -> violation.rule().equals("DANGLING_MODAL_PREFIX"))
             .findFirst();
-    assertTrue(v.isPresent());
-    assertEquals(Severity.ERROR, v.get().severity());
+    assertTrue(v.isEmpty(), "Modal prefix followed by label then instruction should be valid");
+  }
+
+  @Test
+  public void testModalPrefixInLoopDelaySlotValid() {
+    String code =
+        """
+        loop
+        with r1
+        return
+        """;
+    AuditResult result = auditor.audit(code);
+    var v =
+        result.violations().stream()
+            .filter(violation -> violation.rule().equals("DANGLING_MODAL_PREFIX"))
+            .findFirst();
+    assertTrue(v.isEmpty(), "Modal prefix in loop delay slot should be valid");
+  }
+
+  @Test
+  public void testGsuSqrtFileInvariants() throws Exception {
+    var path = java.nio.file.Path.of("../snes-sfx-demo/X-GSU/gsu_maths/gsu_sqrt.i");
+    if (java.nio.file.Files.exists(path)) {
+      String code = java.nio.file.Files.readString(path);
+      AuditResult result = auditor.audit(code);
+      var dangling =
+          result.violations().stream()
+              .filter(violation -> violation.rule().equals("DANGLING_MODAL_PREFIX"))
+              .toList();
+      assertTrue(
+          dangling.isEmpty(),
+          "Expected no DANGLING_MODAL_PREFIX violations in gsu_sqrt.i, found: " + dangling);
+    }
   }
 }

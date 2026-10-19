@@ -1,5 +1,6 @@
 package dev.secondsun.retrolsp.mcp;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.secondsun.retro.util.FileService;
 import dev.secondsun.retro.util.ProjectService;
@@ -170,7 +171,8 @@ public class RetroLspMcpServer implements AutoCloseable {
    */
   public RetroLspMcpServer(
       ProjectService projectService, ServerMcpTransport transport, Path workspaceRoot) {
-    this.objectMapper = new ObjectMapper();
+    this.objectMapper =
+        new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     this.projectService = Objects.requireNonNull(projectService);
     this.workspaceRoot = workspaceRoot != null ? workspaceRoot.toAbsolutePath().normalize() : null;
     this.diagnosticCoordinator =
@@ -251,7 +253,9 @@ public class RetroLspMcpServer implements AutoCloseable {
    */
   public static RetroLspMcpServer createStdio(Path workspaceRoot) {
     Objects.requireNonNull(workspaceRoot, "workspaceRoot is required when starting MCP server");
-    StdioServerTransport transport = new StdioServerTransport(new ObjectMapper());
+    ObjectMapper mapper =
+        new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    StdioServerTransport transport = new StdioServerTransport(mapper);
     return new RetroLspMcpServer(transport, workspaceRoot);
   }
 

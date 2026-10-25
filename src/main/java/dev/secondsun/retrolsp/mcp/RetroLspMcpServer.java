@@ -371,13 +371,16 @@ public class RetroLspMcpServer implements AutoCloseable {
    * @param uri file URI to ensure indexed, or null to trigger lazy root indexing
    */
   public void ensureIndexed(URI uri) {
+    if (workspaceRoot == null) {
+      return;
+    }
     if (uri != null && "file".equalsIgnoreCase(uri.getScheme())) {
       validateUriWithinWorkspace(uri);
       if (!uri.toString().startsWith("file:///snippet")) {
         try {
           Path path = Path.of(uri).toAbsolutePath().normalize();
           Path dir = Files.isDirectory(path) ? path : path.getParent();
-          if (dir != null && indexedDirectories.add(dir)) {
+          if (dir != null && dir.startsWith(workspaceRoot) && Files.isDirectory(dir) && indexedDirectories.add(dir)) {
             projectService.includeDir(dir.toUri());
             if (fileWatcher != null) {
               fileWatcher.registerDirectory(dir);
@@ -387,7 +390,7 @@ public class RetroLspMcpServer implements AutoCloseable {
           LOG.log(Level.WARNING, "Failed to on-demand index directory for URI: " + uri, e);
         }
       }
-    } else if (uri == null && workspaceRoot != null) {
+    } else if (uri == null) {
       if (workspaceRootIndexed.compareAndSet(false, true)) {
         try {
           projectService.includeDir(workspaceRoot.toUri());

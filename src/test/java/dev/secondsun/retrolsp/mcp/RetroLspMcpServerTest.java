@@ -9,6 +9,7 @@ import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -22,6 +23,13 @@ public class RetroLspMcpServerTest {
   public void setUp() {
     server = new RetroLspMcpServer();
     objectMapper = new ObjectMapper();
+  }
+
+  @AfterEach
+  public void tearDown() {
+    if (server != null) {
+      server.close();
+    }
   }
 
   @Test
@@ -261,31 +269,31 @@ public class RetroLspMcpServerTest {
 
   @Test
   public void testWorkspaceBoundaryValidation(@TempDir Path tempDir) {
-    RetroLspMcpServer boundedServer = new RetroLspMcpServer(null, tempDir);
+    try (RetroLspMcpServer boundedServer = new RetroLspMcpServer(null, tempDir)) {
+      // 1. Synthetic snippet URI inside or outside is permitted
+      CallToolResult snippetResult =
+          boundedServer.executeTool(
+              "sfx_lookup_symbol",
+              Map.of("symbol", "temp", "code", "temp:\n nop", "uri", "file:///snippet.s"));
+      assertFalse(snippetResult.isError());
 
-    // 1. Synthetic snippet URI inside or outside is permitted
-    CallToolResult snippetResult =
-        boundedServer.executeTool(
-            "sfx_lookup_symbol",
-            Map.of("symbol", "temp", "code", "temp:\n nop", "uri", "file:///snippet.s"));
-    assertFalse(snippetResult.isError());
+      // 2. URI inside workspace is permitted
+      Path inside = tempDir.resolve("inside.s");
+      CallToolResult insideResult =
+          boundedServer.executeTool(
+              "sfx_lookup_symbol",
+              Map.of("symbol", "temp", "code", "temp:\n nop", "uri", inside.toUri().toString()));
+      assertFalse(insideResult.isError());
 
-    // 2. URI inside workspace is permitted
-    Path inside = tempDir.resolve("inside.s");
-    CallToolResult insideResult =
-        boundedServer.executeTool(
-            "sfx_lookup_symbol",
-            Map.of("symbol", "temp", "code", "temp:\n nop", "uri", inside.toUri().toString()));
-    assertFalse(insideResult.isError());
-
-    // 3. URI outside workspace is rejected with Security error
-    Path outside = Path.of("/etc/shadow.s");
-    CallToolResult outsideResult =
-        boundedServer.executeTool(
-            "sfx_lookup_symbol", Map.of("symbol", "temp", "uri", outside.toUri().toString()));
-    assertTrue(outsideResult.isError());
-    TextContent textContent = (TextContent) outsideResult.content().get(0);
-    assertTrue(textContent.text().contains("Access denied"));
+      // 3. URI outside workspace is rejected with Security error
+      Path outside = Path.of("/etc/shadow.s");
+      CallToolResult outsideResult =
+          boundedServer.executeTool(
+              "sfx_lookup_symbol", Map.of("symbol", "temp", "uri", outside.toUri().toString()));
+      assertTrue(outsideResult.isError());
+      TextContent textContent = (TextContent) outsideResult.content().get(0);
+      assertTrue(textContent.text().contains("Access denied"));
+    }
   }
 
   @Test

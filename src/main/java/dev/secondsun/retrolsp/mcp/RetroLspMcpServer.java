@@ -380,7 +380,10 @@ public class RetroLspMcpServer implements AutoCloseable {
         try {
           Path path = Path.of(uri).toAbsolutePath().normalize();
           Path dir = Files.isDirectory(path) ? path : path.getParent();
-          if (dir != null && dir.startsWith(workspaceRoot) && Files.isDirectory(dir) && indexedDirectories.add(dir)) {
+          if (dir != null
+              && dir.startsWith(workspaceRoot)
+              && Files.isDirectory(dir)
+              && indexedDirectories.add(dir)) {
             projectService.includeDir(dir.toUri());
             if (fileWatcher != null) {
               fileWatcher.registerDirectory(dir);

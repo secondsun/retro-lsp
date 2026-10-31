@@ -289,4 +289,19 @@ public class DiagnosticCoordinatorTest {
       assertTrue(errors.isEmpty(), "Expected 0 errors in gsu_sqrt.i, found: " + errors);
     }
   }
+
+  @Test
+  public void testIsoEngineSuperFxSgsHasNoDiagnostics() throws Exception {
+    var path = java.nio.file.Path.of("../snes-sfx-demo/X-GSU/IsoEngine/SuperFX.sgs");
+    if (java.nio.file.Files.exists(path)) {
+      String code = java.nio.file.Files.readString(path);
+      DiagnosticResult result = coordinator.auditResult(code, path.toUri().toString());
+      var errors =
+          result.violations().stream()
+              .filter(
+                  v -> v.severity() == dev.secondsun.retrolsp.diagnostic.DiagnosticSeverity.ERROR)
+              .toList();
+      assertTrue(errors.isEmpty(), "Expected 0 errors in IsoEngine/SuperFX.sgs, found: " + errors);
+    }
+  }
 }

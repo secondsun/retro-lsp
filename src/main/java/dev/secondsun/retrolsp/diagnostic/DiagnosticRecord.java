@@ -33,7 +33,9 @@ public record DiagnosticRecord(
     } else if (code.startsWith("UNSETTLED_")
         || code.startsWith("UNALIGNED_")
         || code.startsWith("MERGE_")
-        || code.startsWith("MODAL_")) {
+        || code.startsWith("MODAL_")
+        || code.startsWith("ROM_SYMBOL_")
+        || code.startsWith("IWT_R15_")) {
       cat = DiagnosticCategory.HARDWARE_INVARIANT;
     } else {
       cat = DiagnosticCategory.SYNTAX;

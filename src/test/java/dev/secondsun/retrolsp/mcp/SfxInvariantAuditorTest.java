@@ -221,6 +221,74 @@ public class SfxInvariantAuditorTest {
   }
 
   @Test
+  public void testEightNopBeforeTestStopLabelAndStopValid() {
+    String code =
+        """
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        test_stop:
+        stop
+        """;
+    AuditResult result = auditor.audit(code);
+    assertTrue(result.valid());
+    assertTrue(result.violations().isEmpty());
+  }
+
+  @Test
+  public void testUnflushedPixelCacheWarningWhenPlotWithoutTwoRpix() {
+    String code =
+        """
+        plot
+        rpix
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        stop
+        """;
+    AuditResult result = auditor.audit(code);
+    assertTrue(result.valid(), "WARNING should not invalidate AuditResult");
+    var v =
+        result.violations().stream()
+            .filter(violation -> violation.rule().equals("UNFLUSHED_PIXEL_CACHE"))
+            .findFirst();
+    assertTrue(v.isPresent());
+    assertEquals(Severity.WARNING, v.get().severity());
+  }
+
+  @Test
+  public void testPlotWithTwoRpixBeforeStopValid() {
+    String code =
+        """
+        plot
+        rpix
+        rpix
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        stop
+        """;
+    AuditResult result = auditor.audit(code);
+    assertTrue(result.valid());
+    assertTrue(result.violations().isEmpty());
+  }
+
+  @Test
   public void testGsuSqrtFileInvariants() throws Exception {
     var path = java.nio.file.Path.of("../snes-sfx-demo/X-GSU/gsu_maths/gsu_sqrt.i");
     if (java.nio.file.Files.exists(path)) {
@@ -234,5 +302,60 @@ public class SfxInvariantAuditorTest {
           dangling.isEmpty(),
           "Expected no DANGLING_MODAL_PREFIX violations in gsu_sqrt.i, found: " + dangling);
     }
+  }
+
+  @Test
+  public void testRomSymbolRamLoadFlaggedAndGsuramAllowed() {
+    String code =
+        """
+        .segment "GSURAM"
+        RAM_BUF:
+            .res 4
+
+        .segment "GSUCODE"
+        TEXTURE_TABLE:
+            .word $8000
+
+        main:
+            iwt r1, #RAM_BUF
+            ldw (r1)
+            iwt r2, #TEXTURE_TABLE
+            ldw (r2)
+            nop
+            nop
+            nop
+            nop
+            nop
+            nop
+            nop
+            nop
+            stop
+        """;
+    AuditResult result = auditor.audit(code);
+    assertFalse(result.valid());
+    var romLoadViolations =
+        result.violations().stream().filter(v -> "ROM_SYMBOL_RAM_LOAD".equals(v.rule())).toList();
+    assertEquals(1, romLoadViolations.size());
+    assertEquals(13, romLoadViolations.get(0).line());
+    assertTrue(romLoadViolations.get(0).message().contains("TEXTURE_TABLE"));
+    assertTrue(romLoadViolations.get(0).message().contains("GSUCODE"));
+  }
+
+  @Test
+  public void testIwtR15NonLabelFlagged() {
+    String code =
+        """
+        target_label:
+            iwt r15, #target_label
+            nop
+            iwt r15, #$1234
+            nop
+        """;
+    AuditResult result = auditor.audit(code);
+    assertFalse(result.valid());
+    var iwtViolations =
+        result.violations().stream().filter(v -> "IWT_R15_NON_LABEL".equals(v.rule())).toList();
+    assertEquals(1, iwtViolations.size());
+    assertEquals(4, iwtViolations.get(0).line());
   }
 }

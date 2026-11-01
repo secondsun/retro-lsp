@@ -358,4 +358,134 @@ public class SfxInvariantAuditorTest {
     assertEquals(1, iwtViolations.size());
     assertEquals(4, iwtViolations.get(0).line());
   }
+
+  private static java.util.List<SfxInvariantAuditor.InvariantViolation> perf(
+      java.util.List<SfxInvariantAuditor.InvariantViolation> vs, String rule) {
+    return vs.stream().filter(v -> v.rule().equals(rule)).toList();
+  }
+
+  @Test
+  public void testCallInForLoopWarns() {
+    String code =
+        """
+        function outer
+            for 4
+                call helper
+            endfor
+            call helper
+        endfunction
+        """;
+    var hits = perf(auditor.audit(code).violations(), "CALL_IN_HOT_LOOP");
+    assertEquals(1, hits.size());
+    assertEquals(3, hits.get(0).line());
+    assertEquals(Severity.WARNING, hits.get(0).severity());
+  }
+
+  @Test
+  public void testCallAfterCacheWarns() {
+    String code =
+        """
+        cache
+        call helper
+        """;
+    var hits = perf(auditor.audit(code).violations(), "CALL_IN_HOT_LOOP");
+    assertEquals(1, hits.size());
+    assertEquals(2, hits.get(0).line());
+  }
+
+  @Test
+  public void testCallInLabelLoopWarns() {
+    String code =
+        """
+        iwt r12, #4
+        iwt r13, #top
+        top:
+        call helper
+        loop
+        nop
+        call helper
+        """;
+    var hits = perf(auditor.audit(code).violations(), "CALL_IN_HOT_LOOP");
+    assertEquals(1, hits.size());
+    assertEquals(4, hits.get(0).line());
+  }
+
+  @Test
+  public void testCacheInLoopWarns() {
+    String code =
+        """
+        for 10
+            cache
+        endfor
+        """;
+    var hits = perf(auditor.audit(code).violations(), "CACHE_IN_LOOP");
+    assertEquals(1, hits.size());
+    assertEquals(2, hits.get(0).line());
+  }
+
+  @Test
+  public void testCacheBlockOverflowWarns() {
+    StringBuilder sb = new StringBuilder("cache\ntop:\n");
+    for (int i = 0; i < 520; i++) {
+      sb.append("add r1\n");
+    }
+    sb.append("loop\nnop\n");
+    var hits = perf(auditor.audit(sb.toString()).violations(), "CACHE_BLOCK_OVERFLOW");
+    assertEquals(1, hits.size());
+    assertEquals(1, hits.get(0).line());
+    assertEquals(Severity.WARNING, hits.get(0).severity());
+  }
+
+  @Test
+  public void testSmallCacheBlockDoesNotWarn() {
+    String code =
+        """
+        cache
+        top:
+        add r1
+        loop
+        nop
+        """;
+    assertTrue(perf(auditor.audit(code).violations(), "CACHE_BLOCK_OVERFLOW").isEmpty());
+  }
+
+  @Test
+  public void testRpixInFunctionWarnsButNotBeforeStop() {
+    String code =
+        """
+        function draw
+            plot
+            rpix
+            rpix
+        endfunction
+        rpix
+        rpix
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        stop
+        """;
+    var hits = perf(auditor.audit(code).violations(), "REDUNDANT_RPIX_IN_SUBROUTINE");
+    assertEquals(java.util.List.of(3, 4), hits.stream().map(v -> v.line()).toList());
+  }
+
+  @Test
+  public void testRombInLoopWarns() {
+    String code =
+        """
+        romb
+        for 3
+            romb
+        endfor
+        """;
+    var hits = perf(auditor.audit(code).violations(), "ROMB_IN_HOT_LOOP");
+    assertEquals(1, hits.size());
+    assertEquals(3, hits.get(0).line());
+    assertEquals(Severity.WARNING, hits.get(0).severity());
+  }
 }

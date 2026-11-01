@@ -66,12 +66,20 @@ public class DiagnosticCoordinator {
     boolean valid = violations.stream().noneMatch(v -> v.severity() == DiagnosticSeverity.ERROR);
     String summary =
         String.format(
-            "SuperFX Diagnostics: %d violation(s) found (%s).",
-            violations.size(), valid ? "PASSED" : "FAILED");
+            "SuperFX Diagnostics: %d violation(s) found (%s). Categories: syntax=%d, hardware=%d, stack=%d, performance=%d.",
+            violations.size(),
+            valid ? "PASSED" : "FAILED",
+            countCategory(violations, DiagnosticCategory.SYNTAX),
+            countCategory(violations, DiagnosticCategory.HARDWARE_INVARIANT),
+            countCategory(violations, DiagnosticCategory.STACK_INVARIANT),
+            countCategory(violations, DiagnosticCategory.PERFORMANCE));
     return new DiagnosticResult(valid, violations, summary);
   }
 
-  /** Audits a TokenizedFile and collects diagnostic records across all 3 layers. */
+  private static long countCategory(List<DiagnosticRecord> records, DiagnosticCategory cat) {
+    return records.stream().filter(r -> r.category() == cat).count();
+  }
+
   /** Audits a TokenizedFile and collects structured SyntaxDiagnostics across all 3 layers. */
   public List<SyntaxDiagnostic> auditDiagnostics(TokenizedFile file) {
     if (file == null || file.isEmpty()) {

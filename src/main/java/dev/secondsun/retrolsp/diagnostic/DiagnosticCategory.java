@@ -4,5 +4,6 @@ package dev.secondsun.retrolsp.diagnostic;
 public enum DiagnosticCategory {
   SYNTAX,
   HARDWARE_INVARIANT,
-  STACK_INVARIANT
+  STACK_INVARIANT,
+  PERFORMANCE
 }

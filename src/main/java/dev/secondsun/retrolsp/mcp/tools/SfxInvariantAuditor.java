@@ -266,6 +266,8 @@ public class SfxInvariantAuditor {
                   pendingModal.opcode(), pendingModal.line())));
     }
 
+    violations.addAll(new SfxPerformanceAuditor().audit(file));
+
     boolean valid = violations.stream().noneMatch(v -> v.severity() == Severity.ERROR);
     String summary =
         String.format(

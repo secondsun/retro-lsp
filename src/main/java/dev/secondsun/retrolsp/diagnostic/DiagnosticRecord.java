@@ -28,12 +28,24 @@ public record DiagnosticRecord(
   public static DiagnosticRecord from(SyntaxDiagnostic sd) {
     DiagnosticCategory cat;
     String code = sd.code() != null ? sd.code().toUpperCase(Locale.ROOT) : "";
-    if (code.startsWith("STACK_") || code.startsWith("RETURN_") || code.contains("DIVERGENT")) {
+    if (code.equals("CALL_IN_HOT_LOOP")
+        || code.equals("CACHE_BLOCK_OVERFLOW")
+        || code.equals("REDUNDANT_RPIX_IN_SUBROUTINE")
+        || code.equals("ROMB_IN_HOT_LOOP")) {
+      cat = DiagnosticCategory.PERFORMANCE;
+    } else if (code.startsWith("STACK_")
+        || code.startsWith("RETURN_")
+        || code.contains("DIVERGENT")) {
       cat = DiagnosticCategory.STACK_INVARIANT;
     } else if (code.startsWith("UNSETTLED_")
         || code.startsWith("UNALIGNED_")
         || code.startsWith("MERGE_")
         || code.startsWith("MODAL_")
+        || code.startsWith("PIPELINE_")
+        || code.startsWith("WORD_ALIGNMENT")
+        || code.startsWith("NO_HARDWARE_")
+        || code.startsWith("DANGLING_MODAL")
+        || code.startsWith("UNFLUSHED_")
         || code.startsWith("ROM_SYMBOL_")
         || code.startsWith("IWT_R15_")) {
       cat = DiagnosticCategory.HARDWARE_INVARIANT;

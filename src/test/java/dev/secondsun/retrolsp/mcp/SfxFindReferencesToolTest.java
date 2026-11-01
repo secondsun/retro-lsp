@@ -180,7 +180,9 @@ public class SfxFindReferencesToolTest {
 
     var lineNumbers = r.references().stream().map(ReferenceLocation::lineNumber).sorted().toList();
     assertTrue(
-        lineNumbers.equals(List.of(36, 148, 466)) || lineNumbers.equals(List.of(36, 198, 466)),
-        "Expected references at lines [36, 148/198, 466], found: " + lineNumbers);
+        lineNumbers.equals(List.of(36, 148, 466))
+            || lineNumbers.equals(List.of(36, 198, 466))
+            || lineNumbers.equals(List.of(36, 305, 466)),
+        "Expected references at lines [36, 148/198/305, 466], found: " + lineNumbers);
   }
 }

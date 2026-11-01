@@ -537,4 +537,44 @@ public class SfxInvariantAuditorTest {
     assertEquals(3, hits.get(0).line());
     assertEquals(Severity.WARNING, hits.get(0).severity());
   }
+
+  @Test
+  public void testDestructiveWithFollowedBySubAndBranchWarns() {
+    String code =
+        """
+        with r8
+        sub #1
+        beq target
+        nop
+        target:
+        """;
+    AuditResult res = auditor.audit(code);
+    var hits =
+        res.violations().stream()
+            .filter(v -> "DESTRUCTIVE_WITH_COMPARISON".equals(v.rule()))
+            .toList();
+    assertEquals(1, hits.size());
+    assertEquals(1, hits.get(0).line());
+    assertEquals(Severity.WARNING, hits.get(0).severity());
+    assertTrue(hits.get(0).message().contains("modifies R8 in-place"));
+    assertTrue(hits.get(0).message().contains("use 'from R8' instead"));
+  }
+
+  @Test
+  public void testFromRnFollowedBySubAndBranchIsValid() {
+    String code =
+        """
+        from r8
+        sub #1
+        beq target
+        nop
+        target:
+        """;
+    AuditResult res = auditor.audit(code);
+    var hits =
+        res.violations().stream()
+            .filter(v -> "DESTRUCTIVE_WITH_COMPARISON".equals(v.rule()))
+            .toList();
+    assertTrue(hits.isEmpty());
+  }
 }

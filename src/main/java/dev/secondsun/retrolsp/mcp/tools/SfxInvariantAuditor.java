@@ -251,6 +251,14 @@ public class SfxInvariantAuditor {
                         "Modal instruction '%s' on line %d has no valid target instruction (followed by '%s' on line %d). Modal prefixes apply to the single immediately following instruction only.",
                         pendingModal.opcode(), pendingModal.line(), mnemonic, lineNum)));
           }
+
+          // Check if 'with Rn' is followed by destructive arithmetic ('sub', 'add', 'cmp')
+          // where the author likely intended non-destructive comparison ('from Rn')
+          if ("with".equals(pendingModal.opcode())) {
+            checkDestructiveWithPrefix(
+                file, pendingModal.line(), lineNum, mnemonic, tokens, violations);
+          }
+
           // The modal prefix is consumed by this instruction
           pendingModal = null;
         }
@@ -539,6 +547,46 @@ public class SfxInvariantAuditor {
           break;
         }
       }
+    }
+  }
+
+  private void checkDestructiveWithPrefix(
+      TokenizedFile file,
+      int modalLineNum,
+      int targetLineNum,
+      String mnemonic,
+      List<Token> targetTokens,
+      List<InvariantViolation> violations) {
+    if (!"sub".equals(mnemonic) && !"cmp".equals(mnemonic) && !"add".equals(mnemonic)) {
+      return;
+    }
+    String targetReg = extractModalTarget(file, modalLineNum - 1);
+    String regName = targetReg != null ? targetReg.toUpperCase(Locale.ROOT) : "Rn";
+
+    // Scan the next few non-empty lines for conditional branches
+    boolean followedByBranch = false;
+    int checkLines = Math.min(file.textLines(), targetLineNum + 4);
+    for (int l = targetLineNum; l < checkLines; l++) {
+      List<Token> lineTokens = file.getLineTokens(l);
+      if (lineTokens == null || lineTokens.isEmpty()) continue;
+      Optional<Token> op = file.getPrimaryOpcode(l);
+      if (op.isEmpty()) continue;
+      String m = op.get().text().toLowerCase(Locale.ROOT);
+      if (isBranchOrLoop(m) && !"bra".equals(m) && !"jmp".equals(m) && !"loop".equals(m)) {
+        followedByBranch = true;
+        break;
+      }
+    }
+
+    if (followedByBranch) {
+      violations.add(
+          new InvariantViolation(
+              modalLineNum,
+              "DESTRUCTIVE_WITH_COMPARISON",
+              Severity.WARNING,
+              String.format(
+                  "'with %s' followed by '%s' and a conditional branch modifies %s in-place (sets Sreg=%s, Dreg=%s). If this was intended as a non-destructive comparison/test, use 'from %s' instead (which leaves %s intact and writes to R0).",
+                  regName, mnemonic, regName, regName, regName, regName, regName)));
     }
   }
 

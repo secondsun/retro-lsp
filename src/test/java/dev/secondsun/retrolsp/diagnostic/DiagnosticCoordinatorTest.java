@@ -304,4 +304,59 @@ public class DiagnosticCoordinatorTest {
       assertTrue(errors.isEmpty(), "Expected 0 errors in IsoEngine/SuperFX.sgs, found: " + errors);
     }
   }
+
+  @Test
+  public void testValidAnonymousBranchesHaveNoDiagnostics() {
+    String code =
+        """
+        :
+            nop
+            beq :-
+            bne :++
+        :
+            nop
+        :
+            nop
+        """;
+    DiagnosticResult result = coordinator.auditResult(code, "file:///valid_anon.s");
+    var errors =
+        result.violations().stream()
+            .filter(v -> v.severity() == dev.secondsun.retrolsp.diagnostic.DiagnosticSeverity.ERROR)
+            .toList();
+    assertTrue(
+        errors.isEmpty(), "Expected no errors for valid anonymous branches, found: " + errors);
+  }
+
+  @Test
+  public void testMissingAnonymousBranchesReportDiagnostics() {
+    String code =
+        """
+        bne :++
+        beq :-
+        """;
+    DiagnosticResult result = coordinator.auditResult(code, "file:///missing_anon.s");
+    assertFalse(result.valid());
+    var errors =
+        result.violations().stream()
+            .filter(v -> "ANONYMOUS_LABEL_NOT_FOUND".equals(v.rule()))
+            .toList();
+    assertEquals(2, errors.size(), "Expected 2 ANONYMOUS_LABEL_NOT_FOUND errors, found: " + errors);
+    assertEquals("Target anonymous label ':++' does not exist", errors.get(0).message());
+    assertEquals("Target anonymous label ':-' does not exist", errors.get(1).message());
+  }
+
+  @Test
+  public void testTestSMapGridHasNoDiagnostics() throws Exception {
+    var path = java.nio.file.Path.of("../snes-sfx-demo/X-GSU/tests/test_map_grid/Test.s");
+    if (java.nio.file.Files.exists(path)) {
+      String code = java.nio.file.Files.readString(path);
+      DiagnosticResult result = coordinator.auditResult(code, path.toUri().toString());
+      var errors =
+          result.violations().stream()
+              .filter(
+                  v -> v.severity() == dev.secondsun.retrolsp.diagnostic.DiagnosticSeverity.ERROR)
+              .toList();
+      assertTrue(errors.isEmpty(), "Expected 0 errors in Test.s, found: " + errors);
+    }
+  }
 }

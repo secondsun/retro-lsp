@@ -361,6 +361,57 @@ public class RetroLspMcpServerTest {
   }
 
   @Test
+  public void testToolsAcceptWorkspaceRelativePath(@TempDir Path tempDir) throws Exception {
+    Path srcFile = tempDir.resolve("Test.s");
+    Files.writeString(
+        srcFile,
+        """
+        myFunc:
+            nop
+            nop
+            nop
+            nop
+            nop
+            nop
+            nop
+            nop
+            stop
+        """);
+
+    try (RetroLspMcpServer liveServer = new RetroLspMcpServer(null, tempDir)) {
+      // 1. sfx_audit_diagnostics with path
+      CallToolResult diagResult =
+          liveServer.executeTool("sfx_audit_diagnostics", Map.of("path", "Test.s"));
+      assertFalse(diagResult.isError());
+      JsonNode diagJson = objectMapper.readTree(((TextContent) diagResult.content().get(0)).text());
+      assertTrue(diagJson.get("valid").asBoolean(), "Expected valid: " + diagJson);
+
+      // 2. sfx_expand_macro with path
+      CallToolResult expandResult =
+          liveServer.executeTool("sfx_expand_macro", Map.of("path", "Test.s"));
+      assertFalse(expandResult.isError());
+      JsonNode expandJson =
+          objectMapper.readTree(((TextContent) expandResult.content().get(0)).text());
+      assertTrue(expandJson.get("expandedLineCount").asInt() > 0);
+
+      // 3. sfx_analyze_registers with path
+      CallToolResult regResult =
+          liveServer.executeTool("sfx_analyze_registers", Map.of("path", "Test.s"));
+      assertFalse(regResult.isError());
+      JsonNode regJson = objectMapper.readTree(((TextContent) regResult.content().get(0)).text());
+      assertTrue(regJson.get("availableRegisters").asInt() == 16);
+
+      // 4. sfx_lookup_symbol with path
+      CallToolResult lookupResult =
+          liveServer.executeTool("sfx_lookup_symbol", Map.of("symbol", "myFunc", "path", "Test.s"));
+      assertFalse(lookupResult.isError());
+      JsonNode lookupJson =
+          objectMapper.readTree(((TextContent) lookupResult.content().get(0)).text());
+      assertTrue(lookupJson.get("found").asBoolean());
+    }
+  }
+
+  @Test
   public void testUnknownToolReturnsError() {
     CallToolResult result = server.executeTool("non_existent_tool", Map.of());
     assertNotNull(result);

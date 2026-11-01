@@ -55,11 +55,15 @@ public class RetroLspMcpServer implements AutoCloseable {
         "properties": {
           "code": {
             "type": "string",
-            "description": "SuperFX CA65 assembly code to audit for syntax errors, hardware invariants, and stack displacement invariants (optional if uri is provided)"
+            "description": "SuperFX CA65 assembly code to audit for syntax errors, hardware invariants, and stack displacement invariants (optional if uri or path is provided)"
           },
           "uri": {
             "type": "string",
             "description": "Optional file URI pointing to workspace source"
+          },
+          "path": {
+            "type": "string",
+            "description": "Optional workspace-relative file path or URI pointing to workspace source"
           }
         }
       }
@@ -74,11 +78,15 @@ public class RetroLspMcpServer implements AutoCloseable {
         "properties": {
           "code": {
             "type": "string",
-            "description": "CA65 assembly source code containing macros (optional if uri is provided)"
+            "description": "CA65 assembly source code containing macros (optional if uri or path is provided)"
           },
           "uri": {
             "type": "string",
             "description": "Optional document URI to expand"
+          },
+          "path": {
+            "type": "string",
+            "description": "Optional workspace-relative file path or URI to expand"
           }
         }
       }
@@ -125,11 +133,15 @@ public class RetroLspMcpServer implements AutoCloseable {
         "properties": {
           "code": {
             "type": "string",
-            "description": "SuperFX assembly code to analyze (optional if uri is provided)"
+            "description": "SuperFX assembly code to analyze (optional if uri or path is provided)"
           },
           "uri": {
             "type": "string",
             "description": "Optional document URI to analyze"
+          },
+          "path": {
+            "type": "string",
+            "description": "Optional workspace-relative file path or URI to analyze"
           },
           "function": {
             "type": "string",
@@ -468,6 +480,33 @@ public class RetroLspMcpServer implements AutoCloseable {
     }
   }
 
+  private URI resolveTargetUri(String uriStr, String pathStr, boolean usePathAsFileTarget) {
+    String candidate = uriStr;
+    if ((candidate == null || candidate.isBlank()) && usePathAsFileTarget) {
+      candidate = pathStr;
+    }
+    if (candidate == null || candidate.isBlank()) {
+      return null;
+    }
+    try {
+      if (candidate.startsWith("file:")) {
+        return URI.create(candidate);
+      }
+      Path path = Path.of(candidate);
+      if (!path.isAbsolute()) {
+        if (workspaceRoot != null) {
+          path = workspaceRoot.resolve(path);
+        } else {
+          path = path.toAbsolutePath();
+        }
+      }
+      return path.normalize().toUri();
+    } catch (Exception e) {
+      LOG.log(Level.FINE, "Failed to resolve URI candidate: " + candidate, e);
+      return null;
+    }
+  }
+
   /**
    * Executes a tool by name with arguments and formats the result as an MCP CallToolResult.
    *
@@ -477,13 +516,41 @@ public class RetroLspMcpServer implements AutoCloseable {
    */
   public CallToolResult executeTool(String name, Map<String, Object> args) {
     try {
-      String uriStr = (String) args.get("uri");
-      URI uri = uriStr != null ? URI.create(uriStr) : null;
+      boolean isFileTarget =
+          switch (name) {
+            case "sfx_audit_diagnostics",
+                "sfx_audit_invariants",
+                "sfx_expand_macro",
+                "sfx_analyze_registers" ->
+                true;
+            default -> false;
+          };
+
+      String rawUriStr = (String) args.get("uri");
+      String rawPathStr = (String) args.get("path");
+      URI uri = resolveTargetUri(rawUriStr, rawPathStr, isFileTarget);
+      String uriStr = uri != null ? uri.toString() : rawUriStr;
+
       if (uri != null) {
         validateUriWithinWorkspace(uri);
         ensureIndexed(uri);
       } else {
         ensureIndexed(null);
+      }
+
+      if (!isFileTarget && rawPathStr != null && !rawPathStr.isBlank() && workspaceRoot != null) {
+        try {
+          Path filterPath = workspaceRoot.resolve(rawPathStr);
+          Path dir = Files.isDirectory(filterPath) ? filterPath : filterPath.getParent();
+          if (dir != null && Files.isDirectory(dir) && indexedDirectories.add(dir)) {
+            projectService.includeDir(dir.toUri());
+            if (fileWatcher != null) {
+              fileWatcher.registerDirectory(dir);
+            }
+          }
+        } catch (Exception e) {
+          LOG.log(Level.FINE, "Failed lazy indexing for path filter: " + rawPathStr, e);
+        }
       }
 
       Object resultData =
@@ -501,7 +568,7 @@ public class RetroLspMcpServer implements AutoCloseable {
               String code = (String) args.get("code");
               Number lineNum = (Number) args.get("line");
               Integer line = lineNum != null ? lineNum.intValue() : null;
-              String pathFilter = (String) args.get("path");
+              String pathFilter = rawPathStr;
               Number maxNum = (Number) args.get("maxResults");
               Integer maxResults = maxNum != null ? maxNum.intValue() : null;
               yield symbolLookup.lookup(symbol, code, uriStr, line, pathFilter, maxResults);
@@ -511,7 +578,7 @@ public class RetroLspMcpServer implements AutoCloseable {
               String code = (String) args.get("code");
               Number lineNum = (Number) args.get("line");
               Integer line = lineNum != null ? lineNum.intValue() : null;
-              String pathFilter = (String) args.get("path");
+              String pathFilter = rawPathStr;
               Number maxNum = (Number) args.get("maxResults");
               Integer maxResults = maxNum != null ? maxNum.intValue() : null;
               Boolean includeDefs = (Boolean) args.get("includeDefinitions");

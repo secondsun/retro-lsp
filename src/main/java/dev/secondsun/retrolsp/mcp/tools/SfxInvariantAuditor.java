@@ -220,16 +220,21 @@ public class SfxInvariantAuditor {
       boolean isModal = "with".equals(mnemonic) || "to".equals(mnemonic) || "from".equals(mnemonic);
       if (isModal) {
         if (pendingModal != null) {
+          String message;
           if (pendingModal.opcode().equals(mnemonic)) {
-            violations.add(
-                new InvariantViolation(
-                    pendingModal.line(),
-                    "MODAL_PREFIX_OVERWRITTEN",
-                    Severity.WARNING,
-                    String.format(
-                        "Modal prefix '%s' on line %d is immediately overwritten by '%s' on line %d without an intervening instruction.",
-                        pendingModal.opcode(), pendingModal.line(), mnemonic, lineNum)));
+            message =
+                String.format(
+                    "Modal prefix '%s' on line %d is immediately overwritten by '%s' on line %d without an intervening instruction.",
+                    pendingModal.opcode(), pendingModal.line(), mnemonic, lineNum);
+          } else {
+            message =
+                String.format(
+                    "Modal prefix '%s' on line %d is immediately followed by modal instruction '%s' on line %d without an intervening instruction. Modal prefixes apply to the single immediately following instruction only and cannot be combined or chained.",
+                    pendingModal.opcode(), pendingModal.line(), mnemonic, lineNum);
           }
+          violations.add(
+              new InvariantViolation(
+                  pendingModal.line(), "MODAL_PREFIX_OVERWRITTEN", Severity.WARNING, message));
         }
         boolean inDelaySlot = isBranchOrLoop(lastMnemonic);
         pendingModal = new PendingModal(mnemonic, lineNum, inDelaySlot);

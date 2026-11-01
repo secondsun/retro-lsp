@@ -156,6 +156,55 @@ public class SfxInvariantAuditorTest {
   }
 
   @Test
+  public void testConsecutiveDifferentModalInstructionsFlagged() {
+    String codeWithTo =
+        """
+        with r1
+        to r2
+        xor r3
+        """;
+    AuditResult resultWithTo = auditor.audit(codeWithTo);
+    var vWithTo =
+        resultWithTo.violations().stream()
+            .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
+            .findFirst();
+    assertTrue(vWithTo.isPresent());
+    assertEquals(Severity.WARNING, vWithTo.get().severity());
+    assertEquals(1, vWithTo.get().line());
+    assertTrue(vWithTo.get().message().contains("cannot be combined or chained"));
+
+    String codeFromTo =
+        """
+        from r1
+        to r2
+        add r3
+        """;
+    AuditResult resultFromTo = auditor.audit(codeFromTo);
+    var vFromTo =
+        resultFromTo.violations().stream()
+            .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
+            .findFirst();
+    assertTrue(vFromTo.isPresent());
+    assertEquals(Severity.WARNING, vFromTo.get().severity());
+    assertEquals(1, vFromTo.get().line());
+
+    String codeToWith =
+        """
+        to r1
+        with r2
+        sub r3
+        """;
+    AuditResult resultToWith = auditor.audit(codeToWith);
+    var vToWith =
+        resultToWith.violations().stream()
+            .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
+            .findFirst();
+    assertTrue(vToWith.isPresent());
+    assertEquals(Severity.WARNING, vToWith.get().severity());
+    assertEquals(1, vToWith.get().line());
+  }
+
+  @Test
   public void testDanglingModalPrefixAtEndOfFile() {
     String code =
         """

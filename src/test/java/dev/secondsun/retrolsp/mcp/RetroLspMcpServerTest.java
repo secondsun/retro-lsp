@@ -120,6 +120,44 @@ public class RetroLspMcpServerTest {
   }
 
   @Test
+  public void testFindReferencesToolViaServer() throws Exception {
+    String code =
+        """
+        function vectorLength
+            return
+        endfunction
+
+        caller:
+            call vectorLength
+            rpix
+            stop
+        """;
+    CallToolResult result =
+        server.executeTool(
+            "sfx_find_references",
+            Map.of(
+                "symbol",
+                "vectorLength",
+                "code",
+                code,
+                "uri",
+                "file:///vector.s",
+                "contextLines",
+                1));
+    assertNotNull(result);
+    assertFalse(result.isError());
+
+    TextContent content = (TextContent) result.content().get(0);
+    JsonNode json = objectMapper.readTree(content.text());
+    assertEquals("vectorLength", json.get("symbol").asText());
+    assertEquals(1, json.get("totalReferences").asInt());
+    JsonNode firstRef = json.get("references").get(0);
+    assertEquals("call", firstRef.get("kind").asText());
+    assertEquals(6, firstRef.get("lineNumber").asInt());
+    assertTrue(firstRef.get("text").asText().contains("call vectorLength"));
+  }
+
+  @Test
   public void testAnalyzeRegistersToolViaServer() throws Exception {
     String code =
         """

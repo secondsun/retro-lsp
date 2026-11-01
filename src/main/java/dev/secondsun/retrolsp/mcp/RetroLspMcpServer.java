@@ -93,6 +93,14 @@ public class RetroLspMcpServer implements AutoCloseable {
             "type": "string",
             "description": "Symbol identifier to look up"
           },
+          "path": {
+            "type": "string",
+            "description": "Optional workspace-relative folder or file prefix (e.g. 'snes-sfx-demo/X-GSU/IsoEngine/'); only definitions under it are returned"
+          },
+          "maxResults": {
+            "type": "integer",
+            "description": "Optional cap on allLocations (default 20); totalLocations always reports the full count"
+          },
           "code": {
             "type": "string",
             "description": "Optional CA65 assembly code context"
@@ -131,6 +139,48 @@ public class RetroLspMcpServer implements AutoCloseable {
       }
       """;
 
+  private static final String FIND_REFERENCES_SCHEMA =
+      """
+      {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Symbol identifier to find references for"
+          },
+          "path": {
+            "type": "string",
+            "description": "Optional workspace-relative folder or file prefix (e.g. 'snes-sfx-demo/X-GSU/IsoEngine/'); only references under it are returned"
+          },
+          "maxResults": {
+            "type": "integer",
+            "description": "Optional cap on references returned (default 50); totalReferences always reports the full count"
+          },
+          "includeDefinitions": {
+            "type": "boolean",
+            "description": "Whether to include definitions in the results (default false)"
+          },
+          "contextLines": {
+            "type": "integer",
+            "description": "When > 0, includes the source line text for each reference (default 0)"
+          },
+          "code": {
+            "type": "string",
+            "description": "Optional CA65 assembly code context"
+          },
+          "uri": {
+            "type": "string",
+            "description": "Optional document URI for scoped lookup"
+          },
+          "line": {
+            "type": "integer",
+            "description": "Optional cursor line number for scoped lookup"
+          }
+        },
+        "required": ["symbol"]
+      }
+      """;
+
   private final ObjectMapper objectMapper;
   private final ProjectService projectService;
   private final Path workspaceRoot;
@@ -138,6 +188,7 @@ public class RetroLspMcpServer implements AutoCloseable {
   private final SfxInvariantAuditor invariantAuditor;
   private final SfxMacroExpanderTool macroExpander;
   private final SfxSymbolLookupTool symbolLookup;
+  private final dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool findReferences;
   private final SfxRegisterAnalysisTool registerAnalysis;
   private final McpSyncServer syncServer;
   private final CountDownLatch stopLatch;
@@ -183,6 +234,8 @@ public class RetroLspMcpServer implements AutoCloseable {
     this.invariantAuditor = new SfxInvariantAuditor(this.projectService);
     this.macroExpander = new SfxMacroExpanderTool(this.projectService);
     this.symbolLookup = new SfxSymbolLookupTool(this.projectService);
+    this.findReferences =
+        new dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool(this.projectService);
     this.registerAnalysis = new SfxRegisterAnalysisTool(this.projectService);
     this.stopLatch = new CountDownLatch(1);
 
@@ -225,8 +278,14 @@ public class RetroLspMcpServer implements AutoCloseable {
       Tool lookupTool =
           new Tool(
               "sfx_lookup_symbol",
-              "Resolves symbol definitions, scopes, and documentation in CA65 assembly using the shared SymbolService and workspace index.",
+              "Use INSTEAD OF grep to find where an assembly label, X-GSU function, macro, struct, struct field or constant is DEFINED (.s/.i/.inc/.sgs). Returns file path, 1-based lineNumber, and the doc comment (In/Out/Clobbers). Real sources rank above test-fixture copies; use 'path' to scope to a folder. Does not find usages/references (use sfx_find_references), linker addresses (.sym/.dbg), or plain text - use grep for those.",
               LOOKUP_SYMBOL_SCHEMA);
+
+      Tool findReferencesTool =
+          new Tool(
+              "sfx_find_references",
+              "Finds references/usages of a CA65/X-GSU assembly symbol across the workspace. Understands function/call pairs, macro invocations, and scoped symbols. Real sources rank above test fixtures; use 'path' to scope to a folder.",
+              FIND_REFERENCES_SCHEMA);
 
       Tool analyzeTool =
           new Tool(
@@ -244,6 +303,7 @@ public class RetroLspMcpServer implements AutoCloseable {
               .tool(auditTool, args -> executeTool("sfx_audit_invariants", args))
               .tool(expandTool, args -> executeTool("sfx_expand_macro", args))
               .tool(lookupTool, args -> executeTool("sfx_lookup_symbol", args))
+              .tool(findReferencesTool, args -> executeTool("sfx_find_references", args))
               .tool(analyzeTool, args -> executeTool("sfx_analyze_registers", args))
               .build();
     } else {
@@ -441,7 +501,32 @@ public class RetroLspMcpServer implements AutoCloseable {
               String code = (String) args.get("code");
               Number lineNum = (Number) args.get("line");
               Integer line = lineNum != null ? lineNum.intValue() : null;
-              yield symbolLookup.lookup(symbol, code, uriStr, line);
+              String pathFilter = (String) args.get("path");
+              Number maxNum = (Number) args.get("maxResults");
+              Integer maxResults = maxNum != null ? maxNum.intValue() : null;
+              yield symbolLookup.lookup(symbol, code, uriStr, line, pathFilter, maxResults);
+            }
+            case "sfx_find_references" -> {
+              String symbol = (String) args.get("symbol");
+              String code = (String) args.get("code");
+              Number lineNum = (Number) args.get("line");
+              Integer line = lineNum != null ? lineNum.intValue() : null;
+              String pathFilter = (String) args.get("path");
+              Number maxNum = (Number) args.get("maxResults");
+              Integer maxResults = maxNum != null ? maxNum.intValue() : null;
+              Boolean includeDefs = (Boolean) args.get("includeDefinitions");
+              boolean includeDefinitions = includeDefs != null && includeDefs;
+              Number ctxNum = (Number) args.get("contextLines");
+              Integer contextLines = ctxNum != null ? ctxNum.intValue() : 0;
+              yield findReferences.find(
+                  symbol,
+                  code,
+                  uriStr,
+                  line,
+                  pathFilter,
+                  maxResults,
+                  includeDefinitions,
+                  contextLines);
             }
             case "sfx_analyze_registers" -> {
               String code = (String) args.get("code");

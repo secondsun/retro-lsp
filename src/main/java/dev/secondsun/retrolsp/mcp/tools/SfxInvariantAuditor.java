@@ -23,11 +23,23 @@ public class SfxInvariantAuditor {
     WARNING
   }
 
-  public record InvariantViolation(int line, String rule, Severity severity, String message) {
+  public record InvariantViolation(
+      int line, int columnStart, int columnEnd, String rule, Severity severity, String message) {
+    public InvariantViolation(int line, String rule, Severity severity, String message) {
+      this(line, 0, 1, rule, severity, message);
+    }
+
     public SyntaxDiagnostic toSyntaxDiagnostic(URI uri) {
       DiagnosticSeverity sev =
           severity == Severity.ERROR ? DiagnosticSeverity.ERROR : DiagnosticSeverity.WARNING;
-      return new SyntaxDiagnostic(uri, Math.max(1, line), 0, 1, rule, sev, message);
+      return new SyntaxDiagnostic(
+          uri,
+          Math.max(1, line),
+          Math.max(0, columnStart),
+          Math.max(columnStart + 1, columnEnd),
+          rule,
+          sev,
+          message);
     }
   }
 
@@ -37,7 +49,8 @@ public class SfxInvariantAuditor {
   private static final Pattern DEC_LITERAL = Pattern.compile("\\b(\\d+)\\b");
   private static final Pattern BIN_LITERAL = Pattern.compile("%([01]+)");
 
-  private record PendingModal(String opcode, int line, boolean inDelaySlot) {}
+  private record PendingModal(
+      String opcode, int line, int columnStart, int columnEnd, boolean inDelaySlot) {}
 
   private final dev.secondsun.retro.util.ProjectService projectService;
 
@@ -87,7 +100,9 @@ public class SfxInvariantAuditor {
     int consecutiveNops = 0;
     boolean hasPlot = false;
     int rpixAfterPlot = 0;
-    PendingModal pendingModal = null;
+    PendingModal pendingFrom = null;
+    PendingModal pendingTo = null;
+    PendingModal pendingWith = null;
 
     int totalLines = file.textLines();
     Map<String, String> symbolSegments = collectSymbolSegments(file);
@@ -126,9 +141,13 @@ public class SfxInvariantAuditor {
 
       // Check Invariant 3: NO_HARDWARE_MERGE
       if ("merge".equals(mnemonic)) {
+        int mergeStart = opcodeToken.getStartIndex();
+        int mergeEnd = tokens.get(tokens.size() - 1).getEndIndex();
         violations.add(
             new InvariantViolation(
                 lineNum,
+                mergeStart,
+                mergeEnd,
                 "NO_HARDWARE_MERGE",
                 Severity.ERROR,
                 "Hardware 'MERGE' instruction is not supported on SuperFX 3 (FX3). Use byte manipulation workarounds ('hib', 'lob', 'swap', 'or') instead."));
@@ -144,10 +163,14 @@ public class SfxInvariantAuditor {
       }
 
       if ("stop".equals(mnemonic)) {
+        int stopStart = opcodeToken.getStartIndex();
+        int stopEnd = tokens.get(tokens.size() - 1).getEndIndex();
         if (hasPlot && rpixAfterPlot < 2) {
           violations.add(
               new InvariantViolation(
                   lineNum,
+                  stopStart,
+                  stopEnd,
                   "UNFLUSHED_PIXEL_CACHE",
                   Severity.WARNING,
                   String.format(
@@ -158,6 +181,8 @@ public class SfxInvariantAuditor {
           violations.add(
               new InvariantViolation(
                   lineNum,
+                  stopStart,
+                  stopEnd,
                   "PIPELINE_SETTLING_8_NOP",
                   Severity.ERROR,
                   String.format(
@@ -191,11 +216,12 @@ public class SfxInvariantAuditor {
             regLoadedSymbol,
             violations);
         // If ldw/ldb clobbers a target register via 'to'/'with' or R0, clear its tracked symbol
-        String pendingReg =
-            pendingModal != null
-                    && ("to".equals(pendingModal.opcode()) || "with".equals(pendingModal.opcode()))
-                ? extractModalTarget(file, pendingModal.line() - 1)
-                : "r0";
+        String pendingReg = "r0";
+        if (pendingTo != null) {
+          pendingReg = extractModalTarget(file, pendingTo.line() - 1);
+        } else if (pendingWith != null) {
+          pendingReg = extractModalTarget(file, pendingWith.line() - 1);
+        }
         if (pendingReg != null) {
           regLoadedSymbol.remove(pendingReg.toLowerCase(Locale.ROOT));
         }
@@ -217,50 +243,175 @@ public class SfxInvariantAuditor {
       }
 
       // Check Invariant 4: MODAL_INSTRUCTION_SCOPE ('with', 'to', 'from')
+      int modalColStart = opcodeToken.getStartIndex();
+      int modalColEnd =
+          tokens.isEmpty()
+              ? modalColStart + mnemonic.length()
+              : tokens.get(tokens.size() - 1).getEndIndex();
+      if (modalColEnd <= modalColStart) {
+        modalColEnd = modalColStart + mnemonic.length();
+      }
+
       boolean isModal = "with".equals(mnemonic) || "to".equals(mnemonic) || "from".equals(mnemonic);
       if (isModal) {
-        if (pendingModal != null) {
-          String message;
-          if (pendingModal.opcode().equals(mnemonic)) {
-            message =
-                String.format(
-                    "Modal prefix '%s' on line %d is immediately overwritten by '%s' on line %d without an intervening instruction.",
-                    pendingModal.opcode(), pendingModal.line(), mnemonic, lineNum);
-          } else {
-            message =
-                String.format(
-                    "Modal prefix '%s' on line %d is immediately followed by modal instruction '%s' on line %d without an intervening instruction. Modal prefixes apply to the single immediately following instruction only and cannot be combined or chained.",
-                    pendingModal.opcode(), pendingModal.line(), mnemonic, lineNum);
-          }
-          violations.add(
-              new InvariantViolation(
-                  pendingModal.line(), "MODAL_PREFIX_OVERWRITTEN", Severity.WARNING, message));
-        }
         boolean inDelaySlot = isBranchOrLoop(lastMnemonic);
-        pendingModal = new PendingModal(mnemonic, lineNum, inDelaySlot);
-      } else {
-        if (pendingModal != null) {
-          // Check if instruction is a terminal/control instruction where modal is invalid
-          if (isControlInstruction(mnemonic) && !pendingModal.inDelaySlot()) {
+        if ("from".equals(mnemonic)) {
+          if (pendingWith != null) {
             violations.add(
                 new InvariantViolation(
-                    pendingModal.line(),
-                    "DANGLING_MODAL_PREFIX",
+                    pendingWith.line(),
+                    pendingWith.columnStart(),
+                    pendingWith.columnEnd(),
+                    "MODAL_PREFIX_OVERWRITTEN",
                     Severity.ERROR,
                     String.format(
-                        "Modal instruction '%s' on line %d has no valid target instruction (followed by '%s' on line %d). Modal prefixes apply to the single immediately following instruction only.",
-                        pendingModal.opcode(), pendingModal.line(), mnemonic, lineNum)));
+                        "Modal prefix 'with' on line %d is immediately followed by modal instruction 'from' on line %d without an intervening instruction. Modal prefixes apply to the single immediately following instruction only.",
+                        pendingWith.line(), lineNum)));
+            pendingWith = null;
+          }
+          if (pendingFrom != null) {
+            violations.add(
+                new InvariantViolation(
+                    pendingFrom.line(),
+                    pendingFrom.columnStart(),
+                    pendingFrom.columnEnd(),
+                    "MODAL_PREFIX_OVERWRITTEN",
+                    Severity.ERROR,
+                    String.format(
+                        "Modal prefix 'from' on line %d is immediately overwritten by 'from' on line %d without an intervening instruction.",
+                        pendingFrom.line(), lineNum)));
+          }
+          pendingFrom =
+              new PendingModal(mnemonic, lineNum, modalColStart, modalColEnd, inDelaySlot);
+        } else if ("to".equals(mnemonic)) {
+          if (pendingWith != null) {
+            violations.add(
+                new InvariantViolation(
+                    pendingWith.line(),
+                    pendingWith.columnStart(),
+                    pendingWith.columnEnd(),
+                    "MODAL_PREFIX_OVERWRITTEN",
+                    Severity.ERROR,
+                    String.format(
+                        "Modal prefix 'with' on line %d is immediately followed by modal instruction 'to' on line %d without an intervening instruction. Modal prefixes apply to the single immediately following instruction only.",
+                        pendingWith.line(), lineNum)));
+            pendingWith = null;
+          }
+          if (pendingTo != null) {
+            violations.add(
+                new InvariantViolation(
+                    pendingTo.line(),
+                    pendingTo.columnStart(),
+                    pendingTo.columnEnd(),
+                    "MODAL_PREFIX_OVERWRITTEN",
+                    Severity.ERROR,
+                    String.format(
+                        "Modal prefix 'to' on line %d is immediately overwritten by 'to' on line %d without an intervening instruction.",
+                        pendingTo.line(), lineNum)));
+          }
+          pendingTo = new PendingModal(mnemonic, lineNum, modalColStart, modalColEnd, inDelaySlot);
+        } else if ("with".equals(mnemonic)) {
+          if (pendingFrom != null) {
+            violations.add(
+                new InvariantViolation(
+                    pendingFrom.line(),
+                    pendingFrom.columnStart(),
+                    pendingFrom.columnEnd(),
+                    "MODAL_PREFIX_OVERWRITTEN",
+                    Severity.ERROR,
+                    String.format(
+                        "Modal prefix 'from' on line %d is immediately followed by modal instruction 'with' on line %d without an intervening instruction. In SuperFX, 'with' sets both Sreg and Dreg, completely overwriting 'from'.",
+                        pendingFrom.line(), lineNum)));
+            pendingFrom = null;
+          }
+          if (pendingTo != null) {
+            violations.add(
+                new InvariantViolation(
+                    pendingTo.line(),
+                    pendingTo.columnStart(),
+                    pendingTo.columnEnd(),
+                    "MODAL_PREFIX_OVERWRITTEN",
+                    Severity.ERROR,
+                    String.format(
+                        "Modal prefix 'to' on line %d is immediately followed by modal instruction 'with' on line %d without an intervening instruction. In SuperFX, 'with' sets both Sreg and Dreg, completely overwriting 'to'.",
+                        pendingTo.line(), lineNum)));
+            pendingTo = null;
+          }
+          if (pendingWith != null) {
+            violations.add(
+                new InvariantViolation(
+                    pendingWith.line(),
+                    pendingWith.columnStart(),
+                    pendingWith.columnEnd(),
+                    "MODAL_PREFIX_OVERWRITTEN",
+                    Severity.ERROR,
+                    String.format(
+                        "Modal prefix 'with' on line %d is immediately overwritten by 'with' on line %d without an intervening instruction.",
+                        pendingWith.line(), lineNum)));
+          }
+          pendingWith =
+              new PendingModal(mnemonic, lineNum, modalColStart, modalColEnd, inDelaySlot);
+        }
+      } else {
+        List<PendingModal> activeModals = new ArrayList<>();
+        if (pendingFrom != null) activeModals.add(pendingFrom);
+        if (pendingTo != null) activeModals.add(pendingTo);
+        if (pendingWith != null) activeModals.add(pendingWith);
+
+        if (!activeModals.isEmpty()) {
+          if ("move".equals(mnemonic)
+              || "moves".equals(mnemonic)
+              || "moveb".equals(mnemonic)
+              || "movew".equals(mnemonic)) {
+            for (PendingModal pm : activeModals) {
+              String message =
+                  String.format(
+                      "Modal prefix '%s' on line %d precedes '%s' on line %d. '%s' already specifies both source and destination registers directly and does not accept a modal prefix ('to', 'from', 'with'); the prefix on line %d is immediately overwritten.",
+                      pm.opcode(), pm.line(), mnemonic, lineNum, mnemonic, pm.line());
+              violations.add(
+                  new InvariantViolation(
+                      pm.line(),
+                      pm.columnStart(),
+                      pm.columnEnd(),
+                      "MODAL_PREFIX_OVERWRITTEN",
+                      Severity.ERROR,
+                      message));
+            }
+          } else if (isControlInstruction(mnemonic)) {
+            for (PendingModal pm : activeModals) {
+              if (!pm.inDelaySlot()) {
+                violations.add(
+                    new InvariantViolation(
+                        pm.line(),
+                        pm.columnStart(),
+                        pm.columnEnd(),
+                        "DANGLING_MODAL_PREFIX",
+                        Severity.ERROR,
+                        String.format(
+                            "Modal instruction '%s' on line %d has no valid target instruction (followed by '%s' on line %d). Modal prefixes apply to the single immediately following instruction only.",
+                            pm.opcode(), pm.line(), mnemonic, lineNum)));
+              }
+            }
           }
 
           // Check if 'with Rn' is followed by destructive arithmetic ('sub', 'add', 'cmp')
           // where the author likely intended non-destructive comparison ('from Rn')
-          if ("with".equals(pendingModal.opcode())) {
+          if (pendingWith != null) {
             checkDestructiveWithPrefix(
-                file, pendingModal.line(), lineNum, mnemonic, tokens, violations);
+                file,
+                pendingWith.line(),
+                pendingWith.columnStart(),
+                pendingWith.columnEnd(),
+                lineNum,
+                mnemonic,
+                tokens,
+                violations);
           }
 
-          // The modal prefix is consumed by this instruction
-          pendingModal = null;
+          // The modal prefixes are consumed by this instruction
+          pendingFrom = null;
+          pendingTo = null;
+          pendingWith = null;
         }
       }
 
@@ -268,15 +419,41 @@ public class SfxInvariantAuditor {
     }
 
     // Trailing dangling modal prefix at end of code
-    if (pendingModal != null && !pendingModal.inDelaySlot()) {
+    if (pendingFrom != null && !pendingFrom.inDelaySlot()) {
       violations.add(
           new InvariantViolation(
-              pendingModal.line(),
+              pendingFrom.line(),
+              pendingFrom.columnStart(),
+              pendingFrom.columnEnd(),
               "DANGLING_MODAL_PREFIX",
               Severity.ERROR,
               String.format(
-                  "Modal instruction '%s' on line %d has no target instruction (end of file reached). Modal prefixes apply to the single immediately following instruction only.",
-                  pendingModal.opcode(), pendingModal.line())));
+                  "Modal instruction 'from' on line %d has no target instruction (end of file reached). Modal prefixes apply to the single immediately following instruction only.",
+                  pendingFrom.line())));
+    }
+    if (pendingTo != null && !pendingTo.inDelaySlot()) {
+      violations.add(
+          new InvariantViolation(
+              pendingTo.line(),
+              pendingTo.columnStart(),
+              pendingTo.columnEnd(),
+              "DANGLING_MODAL_PREFIX",
+              Severity.ERROR,
+              String.format(
+                  "Modal instruction 'to' on line %d has no target instruction (end of file reached). Modal prefixes apply to the single immediately following instruction only.",
+                  pendingTo.line())));
+    }
+    if (pendingWith != null && !pendingWith.inDelaySlot()) {
+      violations.add(
+          new InvariantViolation(
+              pendingWith.line(),
+              pendingWith.columnStart(),
+              pendingWith.columnEnd(),
+              "DANGLING_MODAL_PREFIX",
+              Severity.ERROR,
+              String.format(
+                  "Modal instruction 'with' on line %d has no target instruction (end of file reached). Modal prefixes apply to the single immediately following instruction only.",
+                  pendingWith.line())));
     }
 
     violations.addAll(new SfxPerformanceAuditor().audit(file));
@@ -339,6 +516,8 @@ public class SfxInvariantAuditor {
           violations.add(
               new InvariantViolation(
                   lineNum,
+                  tok.getStartIndex(),
+                  tok.getEndIndex(),
                   "WORD_ALIGNMENT_LDW_STW",
                   Severity.ERROR,
                   String.format(
@@ -359,6 +538,8 @@ public class SfxInvariantAuditor {
               violations.add(
                   new InvariantViolation(
                       lineNum,
+                      tok.getStartIndex(),
+                      tok.getEndIndex(),
                       "WORD_ALIGNMENT_LDW_STW",
                       Severity.ERROR,
                       String.format(
@@ -521,9 +702,13 @@ public class SfxInvariantAuditor {
                           || t.type == TokenType.TOK_Y
                           || t.type == TokenType.TOK_S);
       if (!immTokens.isEmpty() && !hasLabelIdent) {
+        int immStart = immTokens.get(0).getStartIndex();
+        int immEnd = immTokens.get(immTokens.size() - 1).getEndIndex();
         violations.add(
             new InvariantViolation(
                 lineNum,
+                immStart,
+                immEnd,
                 "IWT_R15_NON_LABEL",
                 Severity.ERROR,
                 String.format(
@@ -553,6 +738,8 @@ public class SfxInvariantAuditor {
   private void checkDestructiveWithPrefix(
       TokenizedFile file,
       int modalLineNum,
+      int modalColStart,
+      int modalColEnd,
       int targetLineNum,
       String mnemonic,
       List<Token> targetTokens,
@@ -582,6 +769,8 @@ public class SfxInvariantAuditor {
       violations.add(
           new InvariantViolation(
               modalLineNum,
+              modalColStart,
+              modalColEnd,
               "DESTRUCTIVE_WITH_COMPARISON",
               Severity.WARNING,
               String.format(
@@ -617,9 +806,13 @@ public class SfxInvariantAuditor {
     }
     String seg = resolveSymbolSegment(sym, file, symbolSegments);
     if (seg != null && isRomSegment(seg)) {
+      int opStart = tokens.get(opcodeIdx).getStartIndex();
+      int opEnd = tokens.get(tokens.size() - 1).getEndIndex();
       violations.add(
           new InvariantViolation(
               lineNum,
+              opStart,
+              opEnd,
               "ROM_SYMBOL_RAM_LOAD",
               Severity.ERROR,
               String.format(

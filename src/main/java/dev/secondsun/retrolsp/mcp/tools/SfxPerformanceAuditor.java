@@ -131,9 +131,13 @@ public class SfxPerformanceAuditor {
         case "cache" -> {
           boolean inLoop = hotRanges.stream().anyMatch(r -> r.containsExclusiveStart(s.line()));
           if (inLoop) {
+            int colStart = s.opcode().getStartIndex();
+            int colEnd = s.tokens().get(s.tokens().size() - 1).getEndIndex();
             out.add(
                 new InvariantViolation(
                     s.line(),
+                    colStart,
+                    colEnd,
                     "CACHE_IN_LOOP",
                     Severity.WARNING,
                     "'cache' inside a loop body resets CBR and invalidates all 32 cache lines on every iteration. Hoist 'cache' outside the loop."));
@@ -144,9 +148,13 @@ public class SfxPerformanceAuditor {
           boolean inCache =
               cacheRegions.stream().anyMatch(c -> s.line() > c[0] && s.line() <= c[1]);
           if (inLoop || inCache) {
+            int colStart = s.opcode().getStartIndex();
+            int colEnd = s.tokens().get(s.tokens().size() - 1).getEndIndex();
             out.add(
                 new InvariantViolation(
                     s.line(),
+                    colStart,
+                    colEnd,
                     "CALL_IN_HOT_LOOP",
                     Severity.WARNING,
                     "'call' inside a hardware loop or cache block incurs caller-save stack traffic and executes at un-cached ROM/RAM speeds if outside the 512-byte window. Consider an inline function or macro expansion."));
@@ -154,9 +162,13 @@ public class SfxPerformanceAuditor {
         }
         case "romb" -> {
           if (hotRanges.stream().anyMatch(r -> r.containsExclusiveStart(s.line()))) {
+            int colStart = s.opcode().getStartIndex();
+            int colEnd = s.tokens().get(s.tokens().size() - 1).getEndIndex();
             out.add(
                 new InvariantViolation(
                     s.line(),
+                    colStart,
+                    colEnd,
                     "ROMB_IN_HOT_LOOP",
                     Severity.WARNING,
                     "'romb' inside a loop body switches the ROM bank on every iteration. Hoist ROM bank selection outside the loop or pre-cache the data in GSURAM."));
@@ -164,9 +176,13 @@ public class SfxPerformanceAuditor {
         }
         case "rpix" -> {
           if (fnDepth > 0 && !precedesStop(stmts, idx)) {
+            int colStart = s.opcode().getStartIndex();
+            int colEnd = s.tokens().get(s.tokens().size() - 1).getEndIndex();
             out.add(
                 new InvariantViolation(
                     s.line(),
+                    colStart,
+                    colEnd,
                     "REDUNDANT_RPIX_IN_SUBROUTINE",
                     Severity.WARNING,
                     "'rpix' inside a function flushes the dual 8-pixel caches on every invocation. Execute 'rpix; rpix' once at the end of the rendering pass before the 8 settling NOPs and 'stop'."));
@@ -214,10 +230,14 @@ public class SfxPerformanceAuditor {
       }
       bytes += byteWeight(s);
     }
+    int cacheColStart = cache.opcode().getStartIndex();
+    int cacheColEnd = cache.tokens().get(cache.tokens().size() - 1).getEndIndex();
     if (bytes > CACHE_SIZE_BYTES) {
       out.add(
           new InvariantViolation(
               cache.line(),
+              cacheColStart,
+              cacheColEnd,
               "CACHE_BLOCK_OVERFLOW",
               Severity.WARNING,
               String.format(
@@ -227,6 +247,8 @@ public class SfxPerformanceAuditor {
       out.add(
           new InvariantViolation(
               cache.line(),
+              cacheColStart,
+              cacheColEnd,
               "CACHE_BLOCK_OVERFLOW",
               Severity.WARNING,
               String.format(

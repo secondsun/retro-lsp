@@ -151,12 +151,12 @@ public class SfxInvariantAuditorTest {
             .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
             .findFirst();
     assertTrue(v.isPresent());
-    assertEquals(Severity.WARNING, v.get().severity());
+    assertEquals(Severity.ERROR, v.get().severity());
     assertEquals(1, v.get().line());
   }
 
   @Test
-  public void testConsecutiveDifferentModalInstructionsFlagged() {
+  public void testConsecutiveConflictingModalInstructionsFlagged() {
     String codeWithTo =
         """
         with r1
@@ -169,24 +169,24 @@ public class SfxInvariantAuditorTest {
             .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
             .findFirst();
     assertTrue(vWithTo.isPresent());
-    assertEquals(Severity.WARNING, vWithTo.get().severity());
+    assertEquals(Severity.ERROR, vWithTo.get().severity());
     assertEquals(1, vWithTo.get().line());
-    assertTrue(vWithTo.get().message().contains("cannot be combined or chained"));
 
-    String codeFromTo =
+    String codeFromFrom =
         """
         from r1
-        to r2
+        from r2
         add r3
         """;
-    AuditResult resultFromTo = auditor.audit(codeFromTo);
-    var vFromTo =
-        resultFromTo.violations().stream()
+    AuditResult resultFromFrom = auditor.audit(codeFromFrom);
+    var vFromFrom =
+        resultFromFrom.violations().stream()
             .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
             .findFirst();
-    assertTrue(vFromTo.isPresent());
-    assertEquals(Severity.WARNING, vFromTo.get().severity());
-    assertEquals(1, vFromTo.get().line());
+    assertTrue(vFromFrom.isPresent());
+    assertEquals(Severity.ERROR, vFromFrom.get().severity());
+    assertEquals(1, vFromFrom.get().line());
+    assertTrue(vFromFrom.get().message().contains("immediately overwritten by 'from'"));
 
     String codeToWith =
         """
@@ -200,8 +200,55 @@ public class SfxInvariantAuditorTest {
             .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
             .findFirst();
     assertTrue(vToWith.isPresent());
-    assertEquals(Severity.WARNING, vToWith.get().severity());
+    assertEquals(Severity.ERROR, vToWith.get().severity());
     assertEquals(1, vToWith.get().line());
+    assertTrue(vToWith.get().message().contains("completely overwriting 'to'"));
+  }
+
+  @Test
+  public void testFromAndToCanBeCombinedToSetSregAndDreg() {
+    String codeFromTo =
+        """
+        from r1
+        to r2
+        add r3
+        """;
+    AuditResult resultFromTo = auditor.audit(codeFromTo);
+    assertTrue(
+        resultFromTo.violations().stream()
+            .noneMatch(v -> v.rule().equals("MODAL_PREFIX_OVERWRITTEN")));
+
+    String codeToFrom =
+        """
+        to r8
+        from anchor_y
+        add r0
+        """;
+    AuditResult resultToFrom = auditor.audit(codeToFrom);
+    assertTrue(
+        resultToFrom.violations().stream()
+            .noneMatch(v -> v.rule().equals("MODAL_PREFIX_OVERWRITTEN")));
+  }
+
+  @Test
+  public void testModalPrefixColumnRangeForUnderline() {
+    String code =
+        """
+            to r11
+            move r11, trap_ptr
+        """;
+    AuditResult result = auditor.audit(code);
+    var v =
+        result.violations().stream()
+            .filter(violation -> violation.rule().equals("MODAL_PREFIX_OVERWRITTEN"))
+            .findFirst();
+    assertTrue(v.isPresent());
+    assertEquals(4, v.get().columnStart());
+    assertEquals(10, v.get().columnEnd());
+    var sd = v.get().toSyntaxDiagnostic(java.net.URI.create("file:///test.s"));
+    assertEquals(4, sd.columnStart());
+    assertEquals(10, sd.columnEnd());
+    assertEquals(dev.secondsun.retro.util.diagnostic.DiagnosticSeverity.ERROR, sd.severity());
   }
 
   @Test

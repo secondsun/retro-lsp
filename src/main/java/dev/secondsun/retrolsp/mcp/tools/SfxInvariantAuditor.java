@@ -317,9 +317,10 @@ public class SfxInvariantAuditor {
         modalColEnd = modalColStart + mnemonic.length();
       }
 
+      boolean inDelaySlot = isBranchOrLoop(lastMnemonic);
       boolean isModal = "with".equals(mnemonic) || "to".equals(mnemonic) || "from".equals(mnemonic);
+
       if (isModal) {
-        boolean inDelaySlot = isBranchOrLoop(lastMnemonic);
         if ("from".equals(mnemonic)) {
           if (pendingWith != null) {
             violations.add(
@@ -471,6 +472,24 @@ public class SfxInvariantAuditor {
                 mnemonic,
                 tokens,
                 violations);
+          }
+
+          // Check if 'from Rn' is followed by 'sub #0' or 'add #0' without 'to'
+          if (pendingFrom != null
+              && pendingTo == null
+              && ("sub".equals(mnemonic) || "add".equals(mnemonic))) {
+            if (isImmediateZero(tokens, opcodeTokenIdx)) {
+              violations.add(
+                  new InvariantViolation(
+                      pendingFrom.line(),
+                      pendingFrom.columnStart(),
+                      pendingFrom.columnEnd(),
+                      "DESTRUCTIVE_FROM_ALU_TO_R0",
+                      Severity.WARNING,
+                      String.format(
+                          "Instruction 'from' on line %d followed by '%s #0' on line %d without 'to' writes the result into R0 (default Dreg), clobbering R0. To test flags of Rn without clobbering R0, use 'with Rn; add #0' or 'moves Rn, Rn'.",
+                          pendingFrom.line(), mnemonic, lineNum)));
+            }
           }
 
           // The modal prefixes are consumed by this instruction
@@ -883,6 +902,54 @@ public class SfxInvariantAuditor {
               String.format(
                   "Invalid RAM load '%s (%s)' from symbol '%s' defined in ROM segment '%s'. SuperFX 'ldw'/'ldb' only read GSURAM ($700000, masked to 8 KB $1FFF); use 'romb' + 'r14' + 'getb'/'getbh' to read ROM data or place the symbol in '.segment \"GSURAM\"'.",
                   mnemonic, addrReg, sym, seg)));
+    }
+  }
+
+  private boolean isImmediateZero(List<Token> tokens, int opcodeIdx) {
+    for (int i = opcodeIdx + 1; i < tokens.size(); i++) {
+      Token t = tokens.get(i);
+      if (t.type == TokenType.TOK_HASH || "#".equals(t.text())) {
+        if (i + 1 < tokens.size()) {
+          Token next = tokens.get(i + 1);
+          String txt = next.text() != null ? next.text().trim().toLowerCase(Locale.ROOT) : "";
+          if (isZeroText(txt) || (next.type == TokenType.TOK_INTCON && next.intVal == 0)) {
+            return true;
+          }
+        }
+      } else if (t.text() != null && t.text().startsWith("#")) {
+        String txt = t.text().substring(1).trim().toLowerCase(Locale.ROOT);
+        if (isZeroText(txt)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private boolean isZeroText(String txt) {
+    if (txt == null || txt.isEmpty()) {
+      return false;
+    }
+    if ("0".equals(txt)
+        || "$0".equals(txt)
+        || "$00".equals(txt)
+        || "$000".equals(txt)
+        || "$0000".equals(txt)
+        || "%0".equals(txt)
+        || "00".equals(txt)
+        || "0000".equals(txt)) {
+      return true;
+    }
+    try {
+      if (txt.startsWith("$")) {
+        return Integer.parseInt(txt.substring(1), 16) == 0;
+      } else if (txt.startsWith("%")) {
+        return Integer.parseInt(txt.substring(1), 2) == 0;
+      } else {
+        return Integer.parseInt(txt, 10) == 0;
+      }
+    } catch (NumberFormatException e) {
+      return false;
     }
   }
 }

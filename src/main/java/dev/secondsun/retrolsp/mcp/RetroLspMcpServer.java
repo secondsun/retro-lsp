@@ -701,11 +701,15 @@ public class RetroLspMcpServer implements AutoCloseable {
     } catch (SecurityException se) {
       LOG.log(Level.WARNING, "Security boundary violation: " + se.getMessage());
       return new CallToolResult(List.of(new TextContent(se.getMessage())), true);
-    } catch (Exception e) {
-      LOG.log(Level.WARNING, "Error executing MCP tool '" + name + "': " + e.getMessage(), e);
+    } catch (Throwable t) {
+      LOG.log(Level.WARNING, "Error executing MCP tool '" + name + "': " + t.getMessage(), t);
       return new CallToolResult(
-          List.of(new TextContent("Error executing tool '" + name + "': " + e.getMessage())), true);
+          List.of(new TextContent("Error executing tool '" + name + "': " + t.getMessage())), true);
     }
+  }
+
+  WorkspaceFileWatcher getFileWatcher() {
+    return fileWatcher;
   }
 
   /**

@@ -20,6 +20,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -35,6 +36,7 @@ public class WorkspaceFileWatcher implements AutoCloseable {
 
   private final WatchService watchService;
   private final Map<WatchKey, Path> watchKeys = new ConcurrentHashMap<>();
+  private final Set<Path> registeredDirs = ConcurrentHashMap.newKeySet();
   private final ProjectService projectService;
   private final Thread watcherThread;
   private volatile boolean running = true;
@@ -69,16 +71,23 @@ public class WorkspaceFileWatcher implements AutoCloseable {
    * @param startPath the directory to start walking
    */
   public void registerDirectory(Path startPath) {
-    if (startPath == null || !Files.isDirectory(startPath)) {
+    if (!running || startPath == null || !Files.isDirectory(startPath)) {
+      return;
+    }
+    Path rootNormalized = startPath.toAbsolutePath().normalize();
+    if (registeredDirs.contains(rootNormalized)) {
       return;
     }
     try {
       Files.walkFileTree(
-          startPath,
+          rootNormalized,
           new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
                 throws IOException {
+              if (!running) {
+                return FileVisitResult.TERMINATE;
+              }
               String name = dir.getFileName() != null ? dir.getFileName().toString() : "";
               if (name.startsWith(".")
                   || "node_modules".equals(name)
@@ -88,18 +97,41 @@ public class WorkspaceFileWatcher implements AutoCloseable {
                   || "out".equals(name)) {
                 return FileVisitResult.SKIP_SUBTREE;
               }
-              registerSingle(dir);
+              Path normalized = dir.toAbsolutePath().normalize();
+              if (registeredDirs.contains(normalized)) {
+                return FileVisitResult.SKIP_SUBTREE;
+              }
+              registerSingle(normalized);
               return FileVisitResult.CONTINUE;
             }
           });
+    } catch (ClosedWatchServiceException e) {
+      // Watcher was closed while scanning; exit quietly.
     } catch (IOException e) {
       LOG.log(Level.WARNING, "Failed to register directory tree: " + startPath, e);
     }
   }
 
   private void registerSingle(Path dir) throws IOException {
-    WatchKey key = dir.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE);
-    watchKeys.put(key, dir);
+    Path normalized = dir.toAbsolutePath().normalize();
+    if (!registeredDirs.add(normalized)) {
+      return;
+    }
+    try {
+      WatchKey key = normalized.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE);
+      watchKeys.put(key, normalized);
+    } catch (IOException | RuntimeException e) {
+      registeredDirs.remove(normalized);
+      throw e;
+    }
+  }
+
+  Set<Path> getRegisteredDirectories() {
+    return Set.copyOf(registeredDirs);
+  }
+
+  int getRegisteredDirectoryCount() {
+    return registeredDirs.size();
   }
 
   private void runLoop() {
@@ -146,7 +178,10 @@ public class WorkspaceFileWatcher implements AutoCloseable {
 
       boolean valid = key.reset();
       if (!valid) {
-        watchKeys.remove(key);
+        Path removed = watchKeys.remove(key);
+        if (removed != null) {
+          registeredDirs.remove(removed.toAbsolutePath().normalize());
+        }
       }
     }
   }
@@ -171,5 +206,7 @@ public class WorkspaceFileWatcher implements AutoCloseable {
     if (watcherThread != null) {
       watcherThread.interrupt();
     }
+    watchKeys.clear();
+    registeredDirs.clear();
   }
 }

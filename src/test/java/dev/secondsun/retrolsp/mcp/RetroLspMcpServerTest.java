@@ -419,4 +419,57 @@ public class RetroLspMcpServerTest {
     TextContent content = (TextContent) result.content().get(0);
     assertTrue(content.text().contains("Unknown tool"));
   }
+
+  @Test
+  public void testWorkspaceFileWatcherRegisterDirectoryIdempotent(@TempDir Path tempDir)
+      throws Exception {
+    Path parent = tempDir.resolve("parent");
+    Path child1 = parent.resolve("child1");
+    Path child2 = parent.resolve("child2");
+    Path subchild = child1.resolve("subchild");
+    Files.createDirectories(subchild);
+    Files.createDirectories(child2);
+
+    Files.writeString(parent.resolve("root.s"), "nop\n");
+    Files.writeString(child1.resolve("c1.s"), "nop\n");
+    Files.writeString(subchild.resolve("sub.s"), "nop\n");
+    Files.writeString(child2.resolve("c2.s"), "nop\n");
+
+    try (WorkspaceFileWatcher watcher =
+        new WorkspaceFileWatcher(server.getProjectService(), null)) {
+      assertEquals(0, watcher.getRegisteredDirectoryCount());
+
+      // 1. Register parent: should register parent, child1, subchild, child2 (4 directories)
+      watcher.registerDirectory(parent);
+      assertEquals(4, watcher.getRegisteredDirectoryCount());
+      assertTrue(watcher.getRegisteredDirectories().contains(parent.toAbsolutePath().normalize()));
+      assertTrue(watcher.getRegisteredDirectories().contains(child1.toAbsolutePath().normalize()));
+      assertTrue(
+          watcher.getRegisteredDirectories().contains(subchild.toAbsolutePath().normalize()));
+      assertTrue(watcher.getRegisteredDirectories().contains(child2.toAbsolutePath().normalize()));
+
+      // 2. Register child1 again: should be an idempotent no-op (no duplicate registration)
+      watcher.registerDirectory(child1);
+      assertEquals(4, watcher.getRegisteredDirectoryCount());
+
+      // 3. Register parent again: should be an idempotent no-op
+      watcher.registerDirectory(parent);
+      assertEquals(4, watcher.getRegisteredDirectoryCount());
+
+      // 4. Register subchild again: should be an idempotent no-op
+      watcher.registerDirectory(subchild);
+      assertEquals(4, watcher.getRegisteredDirectoryCount());
+
+      // 5. Add a new directory and register it
+      Path child3 = parent.resolve("child3");
+      Files.createDirectories(child3);
+      watcher.registerDirectory(child3);
+      assertEquals(5, watcher.getRegisteredDirectoryCount());
+      assertTrue(watcher.getRegisteredDirectories().contains(child3.toAbsolutePath().normalize()));
+
+      // 6. Calling register on parent again still does not duplicate
+      watcher.registerDirectory(parent);
+      assertEquals(5, watcher.getRegisteredDirectoryCount());
+    }
+  }
 }

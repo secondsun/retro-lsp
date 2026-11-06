@@ -624,4 +624,69 @@ public class SfxInvariantAuditorTest {
             .toList();
     assertTrue(hits.isEmpty());
   }
+
+  @Test
+  public void testFromFollowedBySubZeroWithoutToTriggersDestructiveFromAluToR0() {
+    String code =
+        """
+        from r12
+        sub #0
+        """;
+    AuditResult result = auditor.audit(code);
+    assertTrue(result.valid(), "WARNING should not invalidate AuditResult");
+    var v =
+        result.violations().stream()
+            .filter(violation -> "DESTRUCTIVE_FROM_ALU_TO_R0".equals(violation.rule()))
+            .findFirst();
+    assertTrue(v.isPresent());
+    assertEquals(Severity.WARNING, v.get().severity());
+    assertEquals(1, v.get().line());
+    assertTrue(v.get().message().contains("Instruction 'from' on line 1"));
+    assertTrue(v.get().message().contains("followed by 'sub #0' on line 2 without 'to'"));
+    assertTrue(v.get().message().contains("clobbering R0"));
+  }
+
+  @Test
+  public void testFromToSubOrAddZeroDoesNotTriggerDestructiveFromAluToR0() {
+    String code =
+        """
+        from r12
+        to r12
+        add #0
+        """;
+    AuditResult result = auditor.audit(code);
+    assertTrue(
+        result.violations().stream().noneMatch(v -> "DESTRUCTIVE_FROM_ALU_TO_R0".equals(v.rule())));
+  }
+
+  @Test
+  public void testFromFollowedByAddZeroWithoutToTriggersDestructiveFromAluToR0() {
+    String code =
+        """
+        from r12
+        add #$00
+        """;
+    AuditResult result = auditor.audit(code);
+    assertTrue(result.valid());
+    var v =
+        result.violations().stream()
+            .filter(violation -> "DESTRUCTIVE_FROM_ALU_TO_R0".equals(violation.rule()))
+            .findFirst();
+    assertTrue(v.isPresent());
+    assertEquals(Severity.WARNING, v.get().severity());
+    assertEquals(1, v.get().line());
+    assertTrue(v.get().message().contains("followed by 'add #0' on line 2 without 'to'"));
+  }
+
+  @Test
+  public void testFromFollowedBySubNonZeroDoesNotTriggerDestructiveFromAluToR0() {
+    String code =
+        """
+        from r12
+        sub #1
+        """;
+    AuditResult result = auditor.audit(code);
+    assertTrue(
+        result.violations().stream().noneMatch(v -> "DESTRUCTIVE_FROM_ALU_TO_R0".equals(v.rule())));
+  }
 }

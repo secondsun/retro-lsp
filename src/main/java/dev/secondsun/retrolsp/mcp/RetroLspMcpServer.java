@@ -305,23 +305,6 @@ public class RetroLspMcpServer implements AutoCloseable {
         this.workspaceRoot != null ? new SfxTexturePackerTool(this.workspaceRoot) : null;
     this.stopLatch = new CountDownLatch(1);
 
-    WorkspaceFileWatcher watcher = null;
-    if (this.workspaceRoot != null) {
-      try {
-        watcher = new WorkspaceFileWatcher(this.projectService, this.workspaceRoot);
-      } catch (Exception e) {
-        LOG.log(
-            Level.WARNING,
-            "Failed to initialize workspace file watcher for: " + this.workspaceRoot,
-            e);
-      }
-    }
-    this.fileWatcher = watcher;
-    if (this.fileWatcher != null) {
-      this.projectService.setDirectoryIndexedListener(
-          dir -> this.fileWatcher.registerDirectory(dir));
-    }
-
     if (transport != null) {
       Tool diagnosticsTool =
           new Tool(
@@ -350,7 +333,7 @@ public class RetroLspMcpServer implements AutoCloseable {
       Tool findReferencesTool =
           new Tool(
               "sfx_find_references",
-              "Finds references/usages of a CA65/X-GSU assembly symbol across the workspace. Understands function/call pairs, macro invocations, and scoped symbols. Real sources rank above test fixtures; use 'path' to scope to a folder.",
+              "Use INSTEAD OF grep to find references/usages of a CA65/X-GSU assembly symbol across the workspace (.s/.i/.inc/.sgs). Understands function/call pairs, macro invocations, and scoped symbols. Real sources rank above test fixtures; use 'path' to scope to a folder.",
               FIND_REFERENCES_SCHEMA);
 
       Tool analyzeTool =
@@ -362,7 +345,7 @@ public class RetroLspMcpServer implements AutoCloseable {
       Tool packTexturesTool =
           new Tool(
               "sfx_pack_textures",
-              "Packs, updates, or validates a SuperFX Texture Atlas (.sfxproj), exporting companion binaries (.bin, .pal), ca65 assembly index (.i), and layout PNG, or imports bitmap graphics.",
+              "Use INSTEAD OF './tools/texture-packer.sh' to pack, update, or validate a SuperFX Texture Atlas (.sfxproj), exporting companion binaries (.bin, .pal), ca65 assembly index (.i), and layout PNG, or importing bitmap graphics.",
               PACK_TEXTURES_SCHEMA);
 
       ServerCapabilities capabilities = ServerCapabilities.builder().tools(true).build();
@@ -381,6 +364,23 @@ public class RetroLspMcpServer implements AutoCloseable {
               .build();
     } else {
       this.syncServer = null;
+    }
+
+    WorkspaceFileWatcher watcher = null;
+    if (this.workspaceRoot != null) {
+      try {
+        watcher = new WorkspaceFileWatcher(this.projectService, this.workspaceRoot);
+      } catch (Exception e) {
+        LOG.log(
+            Level.WARNING,
+            "Failed to initialize workspace file watcher for: " + this.workspaceRoot,
+            e);
+      }
+    }
+    this.fileWatcher = watcher;
+    if (this.fileWatcher != null) {
+      this.projectService.setDirectoryIndexedListener(
+          dir -> this.fileWatcher.registerDirectory(dir));
     }
   }
 

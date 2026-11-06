@@ -50,11 +50,16 @@ public class WorkspaceFileWatcher implements AutoCloseable {
     this.projectService = Objects.requireNonNull(projectService);
     this.watchService = FileSystems.getDefault().newWatchService();
 
-    if (rootPath != null && Files.exists(rootPath)) {
-      registerDirectory(rootPath);
-    }
-
-    this.watcherThread = Thread.ofVirtual().name("mcp-file-watcher").start(this::runLoop);
+    this.watcherThread =
+        Thread.ofVirtual()
+            .name("mcp-file-watcher")
+            .start(
+                () -> {
+                  if (rootPath != null && Files.exists(rootPath)) {
+                    registerDirectory(rootPath);
+                  }
+                  runLoop();
+                });
   }
 
   /**

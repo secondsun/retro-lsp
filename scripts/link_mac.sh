@@ -25,6 +25,7 @@ cp target/dependency/*.jar dist/mac/app/
 cat << 'EOF' > dist/mac/bin/launcher
 #!/bin/sh
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
-exec "$DIR/bin/java" -p "$DIR/app" --add-modules ALL-MODULE-PATH -m dev.secondsun.retrolsp/dev.secondsun.retrolsp.Main "$@"
+exec "$DIR/bin/java" -XX:TieredStopAtLevel=1 -p "$DIR/app" --add-modules ALL-MODULE-PATH -m dev.secondsun.retrolsp/dev.secondsun.retrolsp.Main "$@"
 EOF
 chmod +x dist/mac/bin/launcher
+dist/mac/bin/java -Xshare:dump >/dev/null 2>&1 || true

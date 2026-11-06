@@ -9,6 +9,7 @@ import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -470,6 +471,66 @@ public class RetroLspMcpServerTest {
       // 6. Calling register on parent again still does not duplicate
       watcher.registerDirectory(parent);
       assertEquals(5, watcher.getRegisteredDirectoryCount());
+    }
+  }
+
+  @Test
+  public void testWorkspaceFileWatcherSkipsToolsAndBuildToolsSubdirectories(@TempDir Path tempDir)
+      throws Exception {
+    Path srcDir = tempDir.resolve("src");
+    Path toolsDir = tempDir.resolve("tools");
+    Path buildToolsDir = tempDir.resolve("build_tools");
+    Files.createDirectories(srcDir);
+    Files.createDirectories(toolsDir);
+    Files.createDirectories(buildToolsDir);
+
+    try (WorkspaceFileWatcher watcher =
+        new WorkspaceFileWatcher(server.getProjectService(), tempDir)) {
+      watcher.registerDirectory(tempDir);
+
+      Set<Path> registered = watcher.getRegisteredDirectories();
+      assertTrue(registered.contains(tempDir.toAbsolutePath().normalize()));
+      assertTrue(registered.contains(srcDir.toAbsolutePath().normalize()));
+      assertFalse(registered.contains(toolsDir.toAbsolutePath().normalize()));
+      assertFalse(registered.contains(buildToolsDir.toAbsolutePath().normalize()));
+
+      // Explicitly registering tools directory should still register it
+      watcher.registerDirectory(toolsDir);
+      assertTrue(
+          watcher.getRegisteredDirectories().contains(toolsDir.toAbsolutePath().normalize()));
+    }
+  }
+
+  @Test
+  public void testLookupSymbolWithScopedPathAndBoundaryValidation(@TempDir Path tempDir)
+      throws Exception {
+    Path dirA = tempDir.resolve("dirA");
+    Files.createDirectories(dirA);
+    Files.writeString(dirA.resolve("funcA.s"), "funcA:\n  nop\n");
+
+    try (RetroLspMcpServer liveServer =
+        new RetroLspMcpServer(
+            new dev.secondsun.retro.util.ProjectService(
+                new dev.secondsun.retro.util.FileService(),
+                new dev.secondsun.retro.util.SymbolService(),
+                tempDir),
+            null,
+            tempDir)) {
+      // 1. Path-scoped lookup works cleanly
+      CallToolResult resultA =
+          liveServer.executeTool("sfx_lookup_symbol", Map.of("symbol", "funcA", "path", "dirA"));
+      assertFalse(resultA.isError());
+      JsonNode jsonA = objectMapper.readTree(((TextContent) resultA.content().get(0)).text());
+      assertTrue(jsonA.get("found").asBoolean());
+      assertEquals("funcA", jsonA.get("symbol").asText());
+
+      // 2. Reject path outside workspace boundary
+      CallToolResult outsideResult =
+          liveServer.executeTool(
+              "sfx_lookup_symbol", Map.of("symbol", "anySym", "path", "../outside/path"));
+      assertTrue(outsideResult.isError());
+      TextContent outsideContent = (TextContent) outsideResult.content().get(0);
+      assertTrue(outsideContent.text().contains("Access denied"));
     }
   }
 }

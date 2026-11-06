@@ -88,16 +88,19 @@ public class WorkspaceFileWatcher implements AutoCloseable {
               if (!running) {
                 return FileVisitResult.TERMINATE;
               }
+              Path normalized = dir.toAbsolutePath().normalize();
               String name = dir.getFileName() != null ? dir.getFileName().toString() : "";
-              if (name.startsWith(".")
-                  || "node_modules".equals(name)
-                  || "target".equals(name)
-                  || "build".equals(name)
-                  || "dist".equals(name)
-                  || "out".equals(name)) {
+              if (!normalized.equals(rootNormalized)
+                  && (name.startsWith(".")
+                      || "node_modules".equals(name)
+                      || "target".equals(name)
+                      || "build".equals(name)
+                      || "dist".equals(name)
+                      || "out".equals(name)
+                      || "tools".equals(name)
+                      || "build_tools".equals(name))) {
                 return FileVisitResult.SKIP_SUBTREE;
               }
-              Path normalized = dir.toAbsolutePath().normalize();
               if (registeredDirs.contains(normalized)) {
                 return FileVisitResult.SKIP_SUBTREE;
               }

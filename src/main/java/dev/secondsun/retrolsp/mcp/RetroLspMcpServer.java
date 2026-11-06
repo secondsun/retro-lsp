@@ -27,8 +27,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.FileHandler;
 import java.util.logging.Level;
@@ -247,6 +249,7 @@ public class RetroLspMcpServer implements AutoCloseable {
   private final McpSyncServer syncServer;
   private final CountDownLatch stopLatch;
   private final WorkspaceFileWatcher fileWatcher;
+  private final CompletableFuture<Void> indexingFuture;
 
   private final AtomicBoolean workspaceRootIndexed = new AtomicBoolean(false);
   private final Set<Path> indexedDirectories = ConcurrentHashMap.newKeySet();
@@ -382,6 +385,15 @@ public class RetroLspMcpServer implements AutoCloseable {
       this.projectService.setDirectoryIndexedListener(
           dir -> this.fileWatcher.registerDirectory(dir));
     }
+
+    if (this.workspaceRoot != null && Files.isDirectory(this.workspaceRoot)) {
+      this.indexingFuture =
+          CompletableFuture.runAsync(
+              this::indexWorkspaceRoot,
+              runnable -> Thread.ofVirtual().name("mcp-workspace-indexer").start(runnable));
+    } else {
+      this.indexingFuture = CompletableFuture.completedFuture(null);
+    }
   }
 
   /**
@@ -513,6 +525,23 @@ public class RetroLspMcpServer implements AutoCloseable {
     projectService.validateUriWithinWorkspace(uri);
   }
 
+  private void indexWorkspaceRoot() {
+    if (workspaceRoot == null) {
+      return;
+    }
+    if (workspaceRootIndexed.compareAndSet(false, true)) {
+      try {
+        projectService.includeDir(workspaceRoot.toUri());
+        indexedDirectories.add(workspaceRoot);
+        if (fileWatcher != null) {
+          fileWatcher.registerDirectory(workspaceRoot);
+        }
+      } catch (Exception e) {
+        LOG.log(Level.WARNING, "Failed indexing for workspace root: " + workspaceRoot, e);
+      }
+    }
+  }
+
   /**
    * Ensures that the target file or directory is indexed in the ProjectService on-demand.
    *
@@ -542,15 +571,12 @@ public class RetroLspMcpServer implements AutoCloseable {
         }
       }
     } else if (uri == null) {
-      if (workspaceRootIndexed.compareAndSet(false, true)) {
+      indexWorkspaceRoot();
+      if (indexingFuture != null) {
         try {
-          projectService.includeDir(workspaceRoot.toUri());
-          indexedDirectories.add(workspaceRoot);
-          if (fileWatcher != null) {
-            fileWatcher.registerDirectory(workspaceRoot);
-          }
+          indexingFuture.get(30, TimeUnit.SECONDS);
         } catch (Exception e) {
-          LOG.log(Level.WARNING, "Failed lazy indexing for workspace root: " + workspaceRoot, e);
+          LOG.log(Level.FINE, "Interrupted or timed out waiting for initial workspace indexing", e);
         }
       }
     }
@@ -610,23 +636,15 @@ public class RetroLspMcpServer implements AutoCloseable {
       if (uri != null) {
         validateUriWithinWorkspace(uri);
         ensureIndexed(uri);
+      } else if (!isFileTarget
+          && rawPathStr != null
+          && !rawPathStr.isBlank()
+          && workspaceRoot != null) {
+        Path filterPath = workspaceRoot.resolve(rawPathStr).toAbsolutePath().normalize();
+        validateUriWithinWorkspace(filterPath.toUri());
+        ensureIndexed(filterPath.toUri());
       } else {
         ensureIndexed(null);
-      }
-
-      if (!isFileTarget && rawPathStr != null && !rawPathStr.isBlank() && workspaceRoot != null) {
-        try {
-          Path filterPath = workspaceRoot.resolve(rawPathStr);
-          Path dir = Files.isDirectory(filterPath) ? filterPath : filterPath.getParent();
-          if (dir != null && Files.isDirectory(dir) && indexedDirectories.add(dir)) {
-            projectService.includeDir(dir.toUri());
-            if (fileWatcher != null) {
-              fileWatcher.registerDirectory(dir);
-            }
-          }
-        } catch (Exception e) {
-          LOG.log(Level.FINE, "Failed lazy indexing for path filter: " + rawPathStr, e);
-        }
       }
 
       Object resultData =

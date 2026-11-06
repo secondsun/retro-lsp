@@ -98,10 +98,20 @@ public class CA65LanguageServer extends LanguageServer {
     }
   }
 
+  /**
+   * Returns the diagnostic coordinator managing syntax, hardware, and stack audits.
+   *
+   * @return the diagnostic coordinator
+   */
   public DiagnosticCoordinator getDiagnosticCoordinator() {
     return diagnosticCoordinator;
   }
 
+  /**
+   * Returns the connected LSP language client.
+   *
+   * @return the language client or null if not yet connected
+   */
   public LanguageClient getClient() {
     return client;
   }
@@ -233,6 +243,7 @@ public class CA65LanguageServer extends LanguageServer {
     }
   }
 
+  /** Waits up to 10 seconds for initial workspace symbol indexing to complete. */
   public void waitForIndexing() {
     try {
       if (indexingFuture != null && !indexingFuture.isDone()) {

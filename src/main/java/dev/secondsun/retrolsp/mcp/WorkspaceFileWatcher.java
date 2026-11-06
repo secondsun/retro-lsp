@@ -39,6 +39,13 @@ public class WorkspaceFileWatcher implements AutoCloseable {
   private final Thread watcherThread;
   private volatile boolean running = true;
 
+  /**
+   * Constructs and starts a virtual-thread filesystem watcher over the workspace root.
+   *
+   * @param projectService project service to notify when files change
+   * @param rootPath canonical root directory to watch recursively
+   * @throws IOException if WatchService creation or directory registration fails
+   */
   public WorkspaceFileWatcher(ProjectService projectService, Path rootPath) throws IOException {
     this.projectService = Objects.requireNonNull(projectService);
     this.watchService = FileSystems.getDefault().newWatchService();

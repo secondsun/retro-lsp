@@ -22,10 +22,16 @@ public class SfxFindReferencesTool {
   private final ProjectService projectService;
   private final SymbolService symbolService;
 
+  /** Default constructor initializing with an empty in-memory ProjectService. */
   public SfxFindReferencesTool() {
     this(new ProjectService(new FileService(), new SymbolService()));
   }
 
+  /**
+   * Constructs tool with the provided project service.
+   *
+   * @param projectService the project service managing files and symbol indexes
+   */
   public SfxFindReferencesTool(ProjectService projectService) {
     this.projectService = Objects.requireNonNull(projectService);
     this.symbolService = projectService.getSymbolService();
@@ -64,6 +70,15 @@ public class SfxFindReferencesTool {
       String kind,
       String text) {}
 
+  /**
+   * Result of a symbol reference search.
+   *
+   * @param symbol the queried symbol name
+   * @param totalReferences total count of references matching the query
+   * @param references list of reference locations up to maxResults
+   * @param ambiguous whether multiple definitions were found
+   * @param definitionCount number of distinct definition sites found
+   */
   public record ReferenceResult(
       String symbol,
       int totalReferences,
@@ -71,6 +86,19 @@ public class SfxFindReferencesTool {
       boolean ambiguous,
       int definitionCount) {}
 
+  /**
+   * Finds references and usages of the given symbol across the workspace.
+   *
+   * @param symbol name of the symbol to find
+   * @param code optional assembly source code to resolve context from
+   * @param uriStr optional document URI
+   * @param line optional 1-based line number
+   * @param pathFilter optional workspace-relative path or directory filter
+   * @param maxResults maximum number of reference locations to return
+   * @param includeDefinitions whether to include definition sites in results
+   * @param contextLines number of surrounding context lines to include
+   * @return reference search result
+   */
   public ReferenceResult find(
       String symbol,
       String code,

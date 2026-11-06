@@ -21,10 +21,16 @@ public class SfxSymbolLookupTool {
   private final ProjectService projectService;
   private final SymbolService symbolService;
 
+  /** Default constructor initializing with an empty in-memory ProjectService. */
   public SfxSymbolLookupTool() {
     this(new ProjectService(new FileService(), new SymbolService()));
   }
 
+  /**
+   * Constructs tool with the provided project service.
+   *
+   * @param projectService project service for resolving files and symbols
+   */
   public SfxSymbolLookupTool(ProjectService projectService) {
     this.projectService = Objects.requireNonNull(projectService);
     this.symbolService = projectService.getSymbolService();
@@ -53,6 +59,17 @@ public class SfxSymbolLookupTool {
   public record SymbolLocation(
       String uri, String path, int line, int lineNumber, int startIndex, int endIndex) {}
 
+  /**
+   * Result of a symbol lookup containing definition site, doc comments, and occurrences.
+   *
+   * @param symbol name of the looked up symbol
+   * @param found whether the symbol definition was found
+   * @param location primary definition location
+   * @param documentation doc comments preceding definition
+   * @param scope enclosing scope name
+   * @param allLocations all matching symbol locations up to maxResults
+   * @param totalLocations total number of matching locations found
+   */
   public record SymbolLookupResult(
       String symbol,
       boolean found,
@@ -62,16 +79,30 @@ public class SfxSymbolLookupTool {
       List<SymbolLocation> allLocations,
       int totalLocations) {}
 
+  /**
+   * Resolves a symbol with default path filter and result limit.
+   *
+   * @param symbol name of the symbol to lookup
+   * @param code optional assembly source code
+   * @param uriStr optional document URI string
+   * @param line optional 1-based line number for contextual resolution
+   * @return symbol lookup result
+   */
   public SymbolLookupResult lookup(String symbol, String code, String uriStr, Integer line) {
     return lookup(symbol, code, uriStr, line, null, null);
   }
 
   /**
-   * Resolves a symbol.
+   * Resolves a symbol definition and documentation.
    *
+   * @param symbol name of the symbol to lookup
+   * @param code optional assembly source code
+   * @param uriStr optional document URI string
+   * @param line optional 1-based line number for contextual resolution
    * @param pathFilter optional workspace-relative folder/file prefix; only locations under it are
    *     returned
    * @param maxResults optional cap on {@code allLocations} (default {@link #DEFAULT_MAX_RESULTS})
+   * @return symbol lookup result
    */
   public SymbolLookupResult lookup(
       String symbol,

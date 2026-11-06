@@ -18,17 +18,44 @@ import java.util.regex.Pattern;
  */
 public class SfxInvariantAuditor {
 
+  /** Severity level for invariant violations. */
   public enum Severity {
+    /** Hardware constraint error that must be resolved. */
     ERROR,
+    /** Warning or optimization recommendation. */
     WARNING
   }
 
+  /**
+   * Represents an individual invariant violation detected in assembly source.
+   *
+   * @param line 1-based line number
+   * @param columnStart start column
+   * @param columnEnd end column
+   * @param rule rule identifier (e.g. SFX_NO_MERGE, SFX_8NOP_BEFORE_STOP)
+   * @param severity severity level
+   * @param message human-readable explanation
+   */
   public record InvariantViolation(
       int line, int columnStart, int columnEnd, String rule, Severity severity, String message) {
+    /**
+     * Convenience constructor defaulting columns to 0 and 1.
+     *
+     * @param line 1-based line number
+     * @param rule rule identifier
+     * @param severity severity level
+     * @param message human-readable explanation
+     */
     public InvariantViolation(int line, String rule, Severity severity, String message) {
       this(line, 0, 1, rule, severity, message);
     }
 
+    /**
+     * Converts this violation into a retro-common SyntaxDiagnostic.
+     *
+     * @param uri URI of the source file
+     * @return converted syntax diagnostic
+     */
     public SyntaxDiagnostic toSyntaxDiagnostic(URI uri) {
       DiagnosticSeverity sev =
           severity == Severity.ERROR ? DiagnosticSeverity.ERROR : DiagnosticSeverity.WARNING;
@@ -43,6 +70,13 @@ public class SfxInvariantAuditor {
     }
   }
 
+  /**
+   * Result of an invariant audit containing status, violations, and summary.
+   *
+   * @param valid whether the audit passed without errors
+   * @param violations list of invariant violations
+   * @param summary human-readable summary
+   */
   public record AuditResult(boolean valid, List<InvariantViolation> violations, String summary) {}
 
   private static final Pattern HEX_LITERAL = Pattern.compile("(?i)(?:\\$|0x)([0-9a-f]+)");
@@ -54,6 +88,7 @@ public class SfxInvariantAuditor {
 
   private final dev.secondsun.retro.util.ProjectService projectService;
 
+  /** Default constructor initializing with an empty in-memory ProjectService. */
   public SfxInvariantAuditor() {
     this(
         new dev.secondsun.retro.util.ProjectService(
@@ -61,14 +96,32 @@ public class SfxInvariantAuditor {
             new dev.secondsun.retro.util.SymbolService()));
   }
 
+  /**
+   * Constructs an auditor with the provided project service.
+   *
+   * @param projectService project service for resolving files and symbols
+   */
   public SfxInvariantAuditor(dev.secondsun.retro.util.ProjectService projectService) {
     this.projectService = Objects.requireNonNull(projectService);
   }
 
+  /**
+   * Audits raw assembly source code without workspace context.
+   *
+   * @param code raw assembly code string
+   * @return audit result
+   */
   public AuditResult audit(String code) {
     return audit(code, null);
   }
 
+  /**
+   * Audits assembly source code or document URI.
+   *
+   * @param code raw assembly code string or null
+   * @param uriStr document URI string or null
+   * @return audit result
+   */
   public AuditResult audit(String code, String uriStr) {
     java.net.URI uri = uriStr != null ? java.net.URI.create(uriStr) : null;
     TokenizedFile file = projectService.resolveFile(uri, code);
@@ -81,6 +134,12 @@ public class SfxInvariantAuditor {
     return audit(file);
   }
 
+  /**
+   * Audits a tokenized file and produces a list of SyntaxDiagnostics.
+   *
+   * @param file the tokenized file to audit
+   * @return list of syntax diagnostics
+   */
   public List<SyntaxDiagnostic> auditDiagnostics(TokenizedFile file) {
     if (file == null || file.isEmpty()) {
       return List.of();
@@ -90,6 +149,12 @@ public class SfxInvariantAuditor {
     return res.violations().stream().map(v -> v.toSyntaxDiagnostic(uri)).toList();
   }
 
+  /**
+   * Audits a tokenized file and produces an AuditResult.
+   *
+   * @param file the tokenized file to audit
+   * @return audit result
+   */
   public AuditResult audit(TokenizedFile file) {
     if (file == null || file.isEmpty()) {
       return new AuditResult(true, List.of(), "Empty code: no invariants audited.");

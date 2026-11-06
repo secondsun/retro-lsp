@@ -19,22 +19,48 @@ public class SfxMacroExpanderTool {
   private final ProjectService projectService;
   private final FileService fileService;
 
+  /** Default constructor initializing with an empty in-memory ProjectService. */
   public SfxMacroExpanderTool() {
     this(new ProjectService(new FileService(), new SymbolService()));
   }
 
+  /**
+   * Constructs tool with the provided project service.
+   *
+   * @param projectService project service managing files and symbol lookups
+   */
   public SfxMacroExpanderTool(ProjectService projectService) {
     this.projectService = Objects.requireNonNull(projectService);
     this.fileService = projectService.getFileService();
   }
 
+  /**
+   * Result of a macro expansion.
+   *
+   * @param expandedCode the expanded assembly source code
+   * @param originalLineCount line count of the source code
+   * @param expandedLineCount line count of the expanded code
+   */
   public record MacroExpandResult(
       String expandedCode, int originalLineCount, int expandedLineCount) {}
 
+  /**
+   * Expands macro directives in raw assembly code string.
+   *
+   * @param code assembly source code
+   * @return macro expansion result
+   */
   public MacroExpandResult expand(String code) {
     return expand(code, null);
   }
 
+  /**
+   * Expands macro directives in assembly code or workspace document URI.
+   *
+   * @param code assembly source code or null
+   * @param uriStr workspace document URI or null
+   * @return macro expansion result
+   */
   public MacroExpandResult expand(String code, String uriStr) {
     URI uri = uriStr != null ? URI.create(uriStr) : null;
     TokenizedFile tokenized = projectService.resolveFile(uri, code);

@@ -36,6 +36,12 @@ public class DiagnosticCoordinator {
   private final SfxInvariantAuditor invariantAuditor;
   private final StackDepthTracker stackTracker;
 
+  /**
+   * Constructs a DiagnosticCoordinator with a project service and optional LSP client.
+   *
+   * @param projectService the project service managing files and symbols
+   * @param client optional LSP client to publish diagnostics to
+   */
   public DiagnosticCoordinator(ProjectService projectService, LanguageClient client) {
     this.projectService = Objects.requireNonNull(projectService);
     this.client = client;
@@ -44,19 +50,40 @@ public class DiagnosticCoordinator {
     this.stackTracker = new StackDepthTracker();
   }
 
+  /**
+   * Constructs a standalone DiagnosticCoordinator without an LSP client.
+   *
+   * @param projectService the project service managing files and symbols
+   */
   public DiagnosticCoordinator(ProjectService projectService) {
     this(projectService, null);
   }
 
+  /**
+   * Returns the underlying project service.
+   *
+   * @return the project service
+   */
   public ProjectService getProjectService() {
     return projectService;
   }
 
+  /**
+   * Returns the connected language client, or null if running standalone.
+   *
+   * @return the language client or null
+   */
   public LanguageClient getLanguageClient() {
     return client;
   }
 
-  /** Audits assembly source code or document URI and returns a unified DiagnosticResult. */
+  /**
+   * Audits assembly source code or document URI and returns a unified DiagnosticResult.
+   *
+   * @param code raw assembly source code, or null to read from workspace
+   * @param uriStr workspace document URI string, or null
+   * @return the unified diagnostic audit result
+   */
   public DiagnosticResult auditResult(String code, String uriStr) {
     TokenizedFile file = resolveFile(code, uriStr);
     if (file == null || file.isEmpty()) {
@@ -80,7 +107,12 @@ public class DiagnosticCoordinator {
     return records.stream().filter(r -> r.category() == cat).count();
   }
 
-  /** Audits a TokenizedFile and collects structured SyntaxDiagnostics across all 3 layers. */
+  /**
+   * Audits a TokenizedFile and collects structured SyntaxDiagnostics across all 3 layers.
+   *
+   * @param file the tokenized file to audit
+   * @return sorted list of syntax diagnostics
+   */
   public List<SyntaxDiagnostic> auditDiagnostics(TokenizedFile file) {
     if (file == null || file.isEmpty()) {
       return List.of();
@@ -121,12 +153,22 @@ public class DiagnosticCoordinator {
     return diagnostics;
   }
 
-  /** Audits a TokenizedFile and collects diagnostic records across all 3 layers. */
+  /**
+   * Audits a TokenizedFile and collects diagnostic records across all 3 layers.
+   *
+   * @param file the tokenized file to audit
+   * @return list of diagnostic records
+   */
   public List<DiagnosticRecord> audit(TokenizedFile file) {
     return auditDiagnostics(file).stream().map(DiagnosticRecord::from).toList();
   }
 
-  /** Collects LSP Diagnostic objects for a given workspace document URI. */
+  /**
+   * Collects LSP Diagnostic objects for a given workspace document URI.
+   *
+   * @param uri document URI to collect diagnostics for
+   * @return list of LSP diagnostics
+   */
   public List<Diagnostic> collectLspDiagnostics(URI uri) {
     if (uri == null) {
       return List.of();
@@ -158,7 +200,11 @@ public class DiagnosticCoordinator {
     return lspDiagnostics;
   }
 
-  /** Audits document and publishes diagnostics to connected LanguageClient if present. */
+  /**
+   * Audits document and publishes diagnostics to connected LanguageClient if present.
+   *
+   * @param uri URI of the document to publish diagnostics for
+   */
   public void publishDiagnostics(URI uri) {
     if (client != null && uri != null) {
       try {
@@ -171,7 +217,11 @@ public class DiagnosticCoordinator {
     }
   }
 
-  /** Clears diagnostics for closed document. */
+  /**
+   * Clears diagnostics for closed document.
+   *
+   * @param uri URI of the closed document
+   */
   public void clearDiagnostics(URI uri) {
     if (client != null && uri != null) {
       try {

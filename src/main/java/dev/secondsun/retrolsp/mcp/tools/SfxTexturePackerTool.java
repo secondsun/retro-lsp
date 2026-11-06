@@ -17,12 +17,37 @@ public class SfxTexturePackerTool {
 
   private final Path workspaceRoot;
 
+  /**
+   * Constructs tool with workspace root boundary.
+   *
+   * @param workspaceRoot canonical workspace root directory
+   */
   public SfxTexturePackerTool(Path workspaceRoot) {
     this.workspaceRoot = Objects.requireNonNull(workspaceRoot);
   }
 
+  /**
+   * Result of texture-packer CLI invocation.
+   *
+   * @param status status string (SUCCESS or FAIL)
+   * @param exitCode process exit code
+   * @param stdout standard output from texture-packer
+   * @param stderr standard error from texture-packer
+   */
   public record TexturePackerResult(String status, int exitCode, String stdout, String stderr) {}
 
+  /**
+   * Executes texture-packer CLI command against an .sfxproj project.
+   *
+   * @param projectPathStr path to the .sfxproj project file
+   * @param action packer action (validate, export, add-textures)
+   * @param autoPack whether to automatically pack atlas during export
+   * @param outputDirStr optional output directory for exported files
+   * @param imagePaths list of image file paths for add-textures action
+   * @param autoQuantize whether to quantize images using Median-Cut algorithm
+   * @param snapPalette whether to snap colors to existing palette
+   * @return texture-packer execution result
+   */
   public TexturePackerResult run(
       String projectPathStr,
       String action,

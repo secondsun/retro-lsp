@@ -13,8 +13,22 @@ import java.util.*;
  */
 public class SfxRegisterAnalysisTool {
 
+  /** Total physical registers available on the SuperFX (GSU / FX3) chip. */
   public static final int TOTAL_SUPERFX_REGISTERS = 16;
 
+  /**
+   * Live interval information for a variable or physical register.
+   *
+   * @param key identifier for the variable or interval
+   * @param functionScope enclosing function scope name
+   * @param isRegister whether this interval represents a fixed physical register
+   * @param registerName physical register name if fixed
+   * @param startLine 1-based start line of the live range
+   * @param endLine 1-based end line of the live range
+   * @param allocatedRegister physical register assigned by allocator
+   * @param isSpill whether the variable was spilled to stack
+   * @param interferences list of conflicting variable keys
+   */
   public record IntervalInfo(
       String key,
       String functionScope,
@@ -26,12 +40,40 @@ public class SfxRegisterAnalysisTool {
       boolean isSpill,
       List<String> interferences) {}
 
+  /**
+   * Basic block information in the Control Flow Graph.
+   *
+   * @param id block identifier
+   * @param startLine 1-based start line
+   * @param endLine 1-based end line
+   * @param entrances list of predecessor block IDs
+   * @param exits list of successor block IDs
+   */
   public record BlockInfo(
       String id, int startLine, int endLine, List<String> entrances, List<String> exits) {}
 
+  /**
+   * Function scope analysis information.
+   *
+   * @param name function scope name
+   * @param startLine 1-based start line
+   * @param endLine 1-based end line
+   * @param allocatedMap register allocation mapping for variables in this function
+   */
   public record FunctionInfo(
       String name, int startLine, int endLine, Map<String, String> allocatedMap) {}
 
+  /**
+   * Complete register analysis result containing pressure, live intervals, and CFG blocks.
+   *
+   * @param maxRegisterPressure peak register pressure across all program points
+   * @param availableRegisters total physical registers available (16)
+   * @param pressureStatus pressure classification status (OPTIMAL, HIGH, CRITICAL)
+   * @param intervals list of live-range intervals
+   * @param allocations map of variable names to assigned physical registers
+   * @param blocks list of CFG basic blocks
+   * @param functions list of analyzed function scopes
+   */
   public record RegisterAnalysisResult(
       int maxRegisterPressure,
       int availableRegisters,
@@ -43,6 +85,7 @@ public class SfxRegisterAnalysisTool {
 
   private final dev.secondsun.retro.util.ProjectService projectService;
 
+  /** Default constructor initializing with an empty in-memory ProjectService. */
   public SfxRegisterAnalysisTool() {
     this(
         new dev.secondsun.retro.util.ProjectService(
@@ -50,14 +93,34 @@ public class SfxRegisterAnalysisTool {
             new dev.secondsun.retro.util.SymbolService()));
   }
 
+  /**
+   * Constructs tool with the provided project service.
+   *
+   * @param projectService project service for resolving files and symbols
+   */
   public SfxRegisterAnalysisTool(dev.secondsun.retro.util.ProjectService projectService) {
     this.projectService = Objects.requireNonNull(projectService);
   }
 
+  /**
+   * Analyzes register allocation and pressure in raw assembly code.
+   *
+   * @param code raw assembly code string
+   * @param functionFilter optional function name filter
+   * @return register analysis result
+   */
   public RegisterAnalysisResult analyze(String code, String functionFilter) {
     return analyze(code, null, functionFilter);
   }
 
+  /**
+   * Analyzes register allocation and pressure in assembly code or workspace document URI.
+   *
+   * @param code raw assembly code string or null
+   * @param uriStr workspace document URI string or null
+   * @param functionFilter optional function name filter
+   * @return register analysis result
+   */
   public RegisterAnalysisResult analyze(String code, String uriStr, String functionFilter) {
     java.net.URI uri = uriStr != null ? java.net.URI.create(uriStr) : null;
     dev.secondsun.retro.util.vo.TokenizedFile tf = projectService.resolveFile(uri, code);

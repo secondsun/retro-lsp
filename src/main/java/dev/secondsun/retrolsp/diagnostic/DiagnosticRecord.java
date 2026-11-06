@@ -6,6 +6,14 @@ import java.util.Locale;
 /**
  * Diagnostic violation record describing a syntax error, hardware invariant violation, or stack
  * displacement violation.
+ *
+ * @param line line number of the diagnostic (1-based)
+ * @param column column index of the diagnostic
+ * @param length length of the token or span in characters
+ * @param rule unique rule identifier or diagnostic code
+ * @param category diagnostic categorization
+ * @param severity severity level (ERROR, WARNING, INFO)
+ * @param message human-readable diagnostic explanation
  */
 public record DiagnosticRecord(
     int line,
@@ -16,6 +24,15 @@ public record DiagnosticRecord(
     DiagnosticSeverity severity,
     String message) {
 
+  /**
+   * Convenience constructor defaulting column and length to 1.
+   *
+   * @param line line number of the diagnostic
+   * @param rule unique rule identifier
+   * @param category diagnostic categorization
+   * @param severity severity level
+   * @param message human-readable diagnostic explanation
+   */
   public DiagnosticRecord(
       int line,
       String rule,
@@ -25,6 +42,12 @@ public record DiagnosticRecord(
     this(line, 1, 1, rule, category, severity, message);
   }
 
+  /**
+   * Converts a retro-common {@link SyntaxDiagnostic} to a {@link DiagnosticRecord}.
+   *
+   * @param sd the syntax diagnostic to convert
+   * @return converted diagnostic record
+   */
   public static DiagnosticRecord from(SyntaxDiagnostic sd) {
     DiagnosticCategory cat;
     String code = sd.code() != null ? sd.code().toUpperCase(Locale.ROOT) : "";

@@ -24,6 +24,9 @@ import java.util.*;
  */
 public class SfxPerformanceAuditor {
 
+  /** Default constructor for SfxPerformanceAuditor. */
+  public SfxPerformanceAuditor() {}
+
   static final int CACHE_SIZE_BYTES = 512;
 
   /** Threshold at which a cache block containing unresolved calls is considered at risk. */
@@ -37,6 +40,12 @@ public class SfxPerformanceAuditor {
     }
   }
 
+  /**
+   * Audits a tokenized file for SuperFX performance anti-patterns.
+   *
+   * @param file the tokenized file to audit
+   * @return list of performance invariant violations
+   */
   public List<InvariantViolation> audit(TokenizedFile file) {
     if (file == null || file.isEmpty()) {
       return List.of();

@@ -252,16 +252,26 @@ public class RetroLspMcpServer implements AutoCloseable {
   private final Set<Path> indexedDirectories = ConcurrentHashMap.newKeySet();
 
   /** Constructs a standalone in-memory MCP server instance without transport (for tool testing). */
+  /** Default constructor initializing with an empty in-memory ProjectService. */
   public RetroLspMcpServer() {
     this(new ProjectService(new FileService(), new SymbolService()), null, null);
   }
 
-  /** Constructs an in-memory MCP server with a custom ProjectService. */
+  /**
+   * Constructs an in-memory MCP server with a custom ProjectService.
+   *
+   * @param projectService the project service managing files and symbols
+   */
   public RetroLspMcpServer(ProjectService projectService) {
     this(projectService, null, null);
   }
 
-  /** Constructs an MCP server attached to the given transport and required workspace root. */
+  /**
+   * Constructs an MCP server attached to the given transport and required workspace root.
+   *
+   * @param transport transport to communicate over (e.g. StdioServerTransport)
+   * @param workspaceRoot canonical root directory boundary for workspace access
+   */
   public RetroLspMcpServer(ServerMcpTransport transport, Path workspaceRoot) {
     this(
         new ProjectService(new FileService(), new SymbolService(), workspaceRoot),
@@ -466,14 +476,29 @@ public class RetroLspMcpServer implements AutoCloseable {
     loggingConfigured.set(false);
   }
 
+  /**
+   * Returns the underlying project service.
+   *
+   * @return the project service
+   */
   public ProjectService getProjectService() {
     return projectService;
   }
 
+  /**
+   * Returns the configured workspace root boundary.
+   *
+   * @return the workspace root path
+   */
   public Path getWorkspaceRoot() {
     return workspaceRoot;
   }
 
+  /**
+   * Returns the diagnostic coordinator.
+   *
+   * @return the diagnostic coordinator
+   */
   public dev.secondsun.retrolsp.diagnostic.DiagnosticCoordinator getDiagnosticCoordinator() {
     return diagnosticCoordinator;
   }
@@ -683,7 +708,11 @@ public class RetroLspMcpServer implements AutoCloseable {
     }
   }
 
-  /** Waits until the server is closed. */
+  /**
+   * Waits until the server is closed.
+   *
+   * @throws InterruptedException if interrupted while awaiting server shutdown
+   */
   public void await() throws InterruptedException {
     stopLatch.await();
   }

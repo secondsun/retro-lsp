@@ -14,7 +14,7 @@ The repository contains two coupled subsystems:
    - Language: Java 26 (Oracle / OpenJDK)
    - Build Tool: Maven (use `./mvnw`)
    - Module: `dev.secondsun.retrolsp` (defined in `src/main/java/module-info.java`)
-   - Core dependencies: `dev.secondsun:retro-common:1.5.0`, `dev.secondsun:sfx-optimizer:0.3`, `com.google.code.gson:gson`, `dev.secondsun:languageserver:0.11.0`.
+   - Core dependencies: `dev.secondsun:retro-common`, `dev.secondsun:sfx-optimizer`, `com.google.code.gson:gson`, `dev.secondsun:languageserver`.
    - Native Image / Distribution: Built via `jlink` into `dist/<platform>/bin/launcher`.
 2. **VS Code Extension Client** (`vscode/` directory):
    - Language: TypeScript 5.7+ (Node 24 runtime, Node16 module resolution)
@@ -32,6 +32,7 @@ Always verify changes using these standard commands:
 | :--- | :--- | :--- |
 | **Complete Verification** | `./scripts/verify.sh` | Runs Java tests, JLink packaging, headless LSP handshake, and VS Code compile/lint. |
 | **Run Java Tests** | `./mvnw test` | Fast JUnit test suite (<2s). |
+| **Check Javadoc** | `./mvnw test javadoc:javadoc` | Runs `test` (or `compile`) alongside `javadoc:javadoc` so `dependency:copy-dependencies` populates `target/dependency` for JPMS `--module-path`. |
 | **Format Java Code** | `./mvnw spotless:apply` | Formats all Java sources using Google Java style. |
 | **Check Java Formatting** | `./mvnw spotless:check` | Verifies Java sources adhere to Google Java style. |
 | **Build JLink Binary** | `./scripts/link_linux.sh` | Packages runtime to `dist/linux/bin/launcher`. |
@@ -52,7 +53,7 @@ When modifying or refactoring this repository, you MUST respect these invariants
    - The Java module name is `dev.secondsun.retrolsp`.
    - Never revert launcher commands or module descriptors to the legacy `dev.secondsun.tm4e4lsp`.
 2. **Location Package**:
-   - `Location` in `retro-common:1.5.0` is located at `dev.secondsun.retro.util.vo.Location`.
+   - `Location` in `retro-common` is located at `dev.secondsun.retro.util.vo.Location`.
    - Do not import `dev.secondsun.retro.util.Location` (deprecated/removed in 1.2.7/1.5.0).
    - In LSP feature code (e.g. `GoToDefinitionLinkFeature`), distinguish between the common value object (`dev.secondsun.retro.util.vo.Location`) and the LSP protocol DTO (`dev.secondsun.lsp.Location`).
 3. **Hermetic Packaging**:

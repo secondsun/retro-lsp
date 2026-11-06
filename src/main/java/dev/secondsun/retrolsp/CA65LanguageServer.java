@@ -11,6 +11,7 @@ import dev.secondsun.lsp.InitializeResult;
 import dev.secondsun.lsp.LanguageClient;
 import dev.secondsun.lsp.LanguageServer;
 import dev.secondsun.lsp.Location;
+import dev.secondsun.lsp.ReferenceParams;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.retro.util.FileService;
 import dev.secondsun.retro.util.ProjectService;
@@ -20,6 +21,7 @@ import dev.secondsun.retrolsp.feature.CompletionFeature;
 import dev.secondsun.retrolsp.feature.DirectiveCompletionFeature;
 import dev.secondsun.retrolsp.feature.DocumentLinkFeature;
 import dev.secondsun.retrolsp.feature.Feature;
+import dev.secondsun.retrolsp.feature.FindReferencesFeature;
 import dev.secondsun.retrolsp.feature.GoToDefinitionLinkFeature;
 import dev.secondsun.retrolsp.feature.HoverFeature;
 import dev.secondsun.retrolsp.feature.IncludeCompletionFeature;
@@ -50,6 +52,7 @@ public class CA65LanguageServer extends LanguageServer {
   private final HoverFeature hoverFeature;
   private DocumentLinkFeature documentLinkFeature;
   private final GoToDefinitionLinkFeature gotoDefinitionLinkFeature;
+  private final FindReferencesFeature findReferencesFeature;
   private final List<Feature<?, ?>> features = new ArrayList<>();
   private IncludeCompletionFeature includeCompletionFeature;
   private DirectiveCompletionFeature commandCompletionFeature;
@@ -82,12 +85,14 @@ public class CA65LanguageServer extends LanguageServer {
       this.hoverFeature = new HoverFeature(fileService, symbolService, projectService);
       this.documentLinkFeature = new DocumentLinkFeature(this.fileService);
       this.gotoDefinitionLinkFeature = new GoToDefinitionLinkFeature(this.symbolService);
+      this.findReferencesFeature = new FindReferencesFeature(this.projectService);
       this.includeCompletionFeature = new IncludeCompletionFeature();
       this.commandCompletionFeature = new DirectiveCompletionFeature();
       this.symbolCompletionFeature = new SymbolCompletionFeature(this.symbolService);
 
       features.add(includeCompletionFeature);
       features.add(gotoDefinitionLinkFeature);
+      features.add(findReferencesFeature);
       features.add(hoverFeature);
       features.add(documentLinkFeature);
       features.add(commandCompletionFeature);
@@ -293,6 +298,16 @@ public class CA65LanguageServer extends LanguageServer {
   public Optional<List<Location>> gotoDefinition(TextDocumentPositionParams params) {
     waitForIndexing();
     return gotoDefinitionLinkFeature.handle(
+        params, projectService.getFileContents(params.textDocument.uri));
+  }
+
+  @Override
+  public Optional<List<Location>> findReferences(ReferenceParams params) {
+    waitForIndexing();
+    if (params == null || params.textDocument == null || params.textDocument.uri == null) {
+      return Optional.empty();
+    }
+    return findReferencesFeature.handle(
         params, projectService.getFileContents(params.textDocument.uri));
   }
 }

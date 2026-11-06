@@ -186,4 +186,41 @@ public class SfxFindReferencesToolTest {
             || lineNumbers.equals(List.of(36, 305, 305, 466)),
         "Expected references at lines [36, 148/198/305, 466], found: " + lineNumbers);
   }
+
+  @Test
+  public void testGsuSqrt32FromDefinitionInRealDemo() {
+    Path xgsuPath = Path.of("../snes-sfx-demo/X-GSU").toAbsolutePath().normalize();
+    Path sqrtPath = xgsuPath.resolve("gsu_maths/gsu_sqrt.i");
+    if (!Files.exists(sqrtPath)) {
+      return;
+    }
+    Path root = Path.of("..").toAbsolutePath().normalize();
+    var ps = new ProjectService(new FileService(), new SymbolService(), root);
+    ps.includeDir(xgsuPath.toUri());
+    var t = new SfxFindReferencesTool(ps);
+
+    // Scoped to gsu_sqrt.i line 17 (0-based for line 18: "function gsu_sqrt32 ...")
+    ReferenceResult r =
+        t.find(
+            "gsu_sqrt32",
+            null,
+            sqrtPath.toUri().toString(),
+            17,
+            "snes-sfx-demo/X-GSU",
+            null,
+            false,
+            1);
+
+    assertTrue(r.totalReferences() >= 2);
+    boolean foundVectorLine538 =
+        r.references().stream()
+            .anyMatch(
+                ref ->
+                    "snes-sfx-demo/X-GSU/gsu_maths/gsu_vector.i".equals(ref.path())
+                        && ref.lineNumber() == 538
+                        && "call".equals(ref.kind()));
+    assertTrue(
+        foundVectorLine538,
+        "Expected call gsu_sqrt32 at line 538 in gsu_vector.i, found: " + r.references());
+  }
 }

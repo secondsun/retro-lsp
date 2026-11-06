@@ -92,6 +92,9 @@ function checkResponses() {
           if (!caps.hoverProvider) {
             throw new Error('Expected hoverProvider capability to be true');
           }
+          if (!caps.referencesProvider) {
+            throw new Error('Expected referencesProvider capability to be defined');
+          }
           if (!caps.completionProvider) {
             throw new Error('Expected completionProvider capability to be defined');
           }

@@ -59,6 +59,7 @@ The extension and language server can be configured through the following settin
 - **Customizable source directory**: Use `retroca65.sourceDirectory` to set your project's source root.
 - **libSFX support**: Configurable `retroca65.libSFXRoot` for integrating libSFX macros and headers.
 - **Go to Definition**: Jump directly to definitions of procs, labels, enums, structs, and macro references.
+- **Find All References**: Locate all usages and call sites of functions (`call`), labels, macros, struct fields, and scoped variables across the workspace.
 - **Go to Included File**: Navigate to files specified in CA65 `.include` control commands.
 - **Autocomplete File Includes**: Directory and file completions when typing `.include "..."`.
 - **Control Command Completion**: Contextual autocompletion for common CA65 control commands and directives.
@@ -77,7 +78,6 @@ The extension and language server can be configured through the following settin
 
 - Dynamic help text on hovers
 - Refactoring tools (rename symbols and files)
-- Find all references / Go to usages
 - Additional autocompletion for user constants and symbols
 
 ## Building from Source

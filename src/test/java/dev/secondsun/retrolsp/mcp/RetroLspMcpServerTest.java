@@ -380,12 +380,21 @@ public class RetroLspMcpServerTest {
         """);
 
     try (RetroLspMcpServer liveServer = new RetroLspMcpServer(null, tempDir)) {
-      // 1. sfx_audit_diagnostics with path
+      // 1. sfx_audit_diagnostics with path and file_path alias
       CallToolResult diagResult =
           liveServer.executeTool("sfx_audit_diagnostics", Map.of("path", "Test.s"));
       assertFalse(diagResult.isError());
       JsonNode diagJson = objectMapper.readTree(((TextContent) diagResult.content().get(0)).text());
       assertTrue(diagJson.get("valid").asBoolean(), "Expected valid: " + diagJson);
+
+      CallToolResult diagFilePathResult =
+          liveServer.executeTool("sfx_audit_diagnostics", Map.of("file_path", "Test.s"));
+      assertFalse(diagFilePathResult.isError());
+      JsonNode diagFilePathJson =
+          objectMapper.readTree(((TextContent) diagFilePathResult.content().get(0)).text());
+      assertTrue(
+          diagFilePathJson.get("valid").asBoolean(),
+          "Expected valid via file_path alias: " + diagFilePathJson);
 
       // 2. sfx_expand_macro with path
       CallToolResult expandResult =

@@ -66,7 +66,11 @@ public class RetroLspMcpServer implements AutoCloseable {
           },
           "path": {
             "type": "string",
-            "description": "Optional workspace-relative file path or URI pointing to workspace source"
+            "description": "Optional workspace-relative file path or URI pointing to workspace source (also accepts 'file_path')"
+          },
+          "file_path": {
+            "type": "string",
+            "description": "Alias for 'path': optional workspace-relative file path or URI pointing to workspace source"
           }
         }
       }
@@ -630,6 +634,12 @@ public class RetroLspMcpServer implements AutoCloseable {
 
       String rawUriStr = (String) args.get("uri");
       String rawPathStr = (String) args.get("path");
+      if (rawPathStr == null || rawPathStr.isBlank()) {
+        rawPathStr = (String) args.get("file_path");
+      }
+      if (rawPathStr == null || rawPathStr.isBlank()) {
+        rawPathStr = (String) args.get("file");
+      }
       URI uri = resolveTargetUri(rawUriStr, rawPathStr, isFileTarget);
       String uriStr = uri != null ? uri.toString() : rawUriStr;
 

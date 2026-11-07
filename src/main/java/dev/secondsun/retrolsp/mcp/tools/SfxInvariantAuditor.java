@@ -82,6 +82,9 @@ public class SfxInvariantAuditor {
   private static final Pattern HEX_LITERAL = Pattern.compile("(?i)(?:\\$|0x)([0-9a-f]+)");
   private static final Pattern DEC_LITERAL = Pattern.compile("\\b(\\d+)\\b");
   private static final Pattern BIN_LITERAL = Pattern.compile("%([01]+)");
+  private static final Pattern IBT_NEGATIVE_IMM =
+      Pattern.compile(
+          "(?i)\\bibt\\s+r(?:1[0-5]|[0-9])\\s*,\\s*#\\s*(-\\s*(?:\\$[0-9a-f]+|0x[0-9a-f]+|%[01]+|\\d+))");
 
   private record PendingModal(
       String opcode, int line, int columnStart, int columnEnd, boolean inDelaySlot) {}
@@ -299,6 +302,25 @@ public class SfxInvariantAuditor {
           || "dec".equals(mnemonic)) {
         if (opcodeTokenIdx + 1 < tokens.size()) {
           regLoadedSymbol.remove(tokens.get(opcodeTokenIdx + 1).text().toLowerCase(Locale.ROOT));
+        }
+        if ("ibt".equals(mnemonic)) {
+          String uncommented = rawLine.split(";", 2)[0];
+          Matcher ibtNeg = IBT_NEGATIVE_IMM.matcher(uncommented);
+          if (ibtNeg.find()) {
+            String negLiteral = ibtNeg.group(1).replaceAll("\\s+", "");
+            int colStart = opcodeToken.getStartIndex();
+            int colEnd = tokens.get(tokens.size() - 1).getEndIndex();
+            violations.add(
+                new InvariantViolation(
+                    lineNum,
+                    colStart,
+                    colEnd,
+                    "IBT_NEGATIVE_IMMEDIATE",
+                    Severity.ERROR,
+                    String.format(
+                        "Unmasked negative immediate '#%s' in 'ibt': ca65's GSU_Assembler.i macro checks '0 <= imm <= 255' and rejects negative literals. Use two's-complement byte masking ('#<(%s)') or unsigned hex ('#$80'–'#$FF').",
+                        negLiteral, negLiteral)));
+          }
         }
       } else if ("call".equals(mnemonic)
           || "function".equals(mnemonic)

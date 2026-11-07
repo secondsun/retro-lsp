@@ -689,4 +689,33 @@ public class SfxInvariantAuditorTest {
     assertTrue(
         result.violations().stream().noneMatch(v -> "DESTRUCTIVE_FROM_ALU_TO_R0".equals(v.rule())));
   }
+
+  @Test
+  public void testIbtUnmaskedNegativeImmediateFlaggedAndMaskedOrHexAllowed() {
+    String code =
+        """
+        ibt r0, #-128
+        ibt r1, #<(-128)
+        ibt r2, #$80
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        stop
+        """;
+    AuditResult result = auditor.audit(code);
+    assertFalse(result.valid());
+    var hits =
+        result.violations().stream()
+            .filter(v -> "IBT_NEGATIVE_IMMEDIATE".equals(v.rule()))
+            .toList();
+    assertEquals(1, hits.size());
+    assertEquals(1, hits.get(0).line());
+    assertEquals(Severity.ERROR, hits.get(0).severity());
+    assertTrue(hits.get(0).message().contains("#-128"));
+  }
 }

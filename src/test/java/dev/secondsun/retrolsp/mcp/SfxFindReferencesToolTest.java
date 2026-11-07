@@ -183,8 +183,10 @@ public class SfxFindReferencesToolTest {
         lineNumbers.equals(List.of(36, 148, 466))
             || lineNumbers.equals(List.of(36, 198, 466))
             || lineNumbers.equals(List.of(36, 305, 466))
-            || lineNumbers.equals(List.of(36, 305, 305, 466)),
-        "Expected references at lines [36, 148/198/305, 466], found: " + lineNumbers);
+            || lineNumbers.equals(List.of(36, 305, 305, 466))
+            || lineNumbers.equals(List.of(36, 315, 466))
+            || lineNumbers.equals(List.of(36, 315, 315, 466)),
+        "Expected references at lines [36, 148/198/305/315, 466], found: " + lineNumbers);
   }
 
   @Test

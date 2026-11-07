@@ -70,7 +70,7 @@ public class WorkspaceFileWatcher implements AutoCloseable {
    *
    * @param startPath the directory to start walking
    */
-  public void registerDirectory(Path startPath) {
+  public synchronized void registerDirectory(Path startPath) {
     if (!running || startPath == null || !Files.isDirectory(startPath)) {
       return;
     }

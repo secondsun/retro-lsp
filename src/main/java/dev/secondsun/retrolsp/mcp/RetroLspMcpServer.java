@@ -9,7 +9,6 @@ import dev.secondsun.retrolsp.mcp.tools.SfxInvariantAuditor;
 import dev.secondsun.retrolsp.mcp.tools.SfxMacroExpanderTool;
 import dev.secondsun.retrolsp.mcp.tools.SfxRegisterAnalysisTool;
 import dev.secondsun.retrolsp.mcp.tools.SfxSymbolLookupTool;
-import dev.secondsun.retrolsp.mcp.tools.SfxTexturePackerTool;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransport;
@@ -200,46 +199,6 @@ public class RetroLspMcpServer implements AutoCloseable {
       }
       """;
 
-  private static final String PACK_TEXTURES_SCHEMA =
-      """
-      {
-        "type": "object",
-        "properties": {
-          "project_path": {
-            "type": "string",
-            "description": "Path to the .sfxproj project file (workspace-relative or absolute)"
-          },
-          "action": {
-            "type": "string",
-            "enum": ["pack", "import", "validate"],
-            "description": "Action to perform: 'pack' (default), 'import', or 'validate'"
-          },
-          "auto_pack": {
-            "type": "boolean",
-            "description": "Whether to auto-pack textures using shelf packing during 'pack'"
-          },
-          "output_dir": {
-            "type": "string",
-            "description": "Optional output directory to save exported assets"
-          },
-          "image_paths": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "List of bitmap image paths to import when action is 'import'"
-          },
-          "auto_quantize": {
-            "type": "boolean",
-            "description": "Whether to auto-quantize palette when importing images"
-          },
-          "snap_palette": {
-            "type": "boolean",
-            "description": "Whether to snap unmapped colors to nearest existing palette slots when importing images"
-          }
-        },
-        "required": ["project_path"]
-      }
-      """;
-
   private final ObjectMapper objectMapper;
   private final ProjectService projectService;
   private final Path workspaceRoot;
@@ -249,7 +208,6 @@ public class RetroLspMcpServer implements AutoCloseable {
   private final SfxSymbolLookupTool symbolLookup;
   private final dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool findReferences;
   private final SfxRegisterAnalysisTool registerAnalysis;
-  private final SfxTexturePackerTool texturePacker;
   private final McpSyncServer syncServer;
   private final CountDownLatch stopLatch;
   private final WorkspaceFileWatcher fileWatcher;
@@ -308,8 +266,6 @@ public class RetroLspMcpServer implements AutoCloseable {
     this.findReferences =
         new dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool(this.projectService);
     this.registerAnalysis = new SfxRegisterAnalysisTool(this.projectService);
-    this.texturePacker =
-        this.workspaceRoot != null ? new SfxTexturePackerTool(this.workspaceRoot) : null;
     this.stopLatch = new CountDownLatch(1);
 
     if (transport != null) {
@@ -349,12 +305,6 @@ public class RetroLspMcpServer implements AutoCloseable {
               "Analyzes SuperFX register allocation, live-range intervals, CFG basic blocks, and register pressure.",
               ANALYZE_REGISTERS_SCHEMA);
 
-      Tool packTexturesTool =
-          new Tool(
-              "sfx_pack_textures",
-              "Use INSTEAD OF './tools/texture-packer.sh' to pack, update, or validate a SuperFX Texture Atlas (.sfxproj), exporting companion binaries (.bin, .pal), ca65 assembly index (.i), and layout PNG, or importing bitmap graphics.",
-              PACK_TEXTURES_SCHEMA);
-
       ServerCapabilities capabilities = ServerCapabilities.builder().tools(true).build();
 
       this.syncServer =
@@ -367,7 +317,6 @@ public class RetroLspMcpServer implements AutoCloseable {
               .tool(lookupTool, args -> executeTool("sfx_lookup_symbol", args))
               .tool(findReferencesTool, args -> executeTool("sfx_find_references", args))
               .tool(analyzeTool, args -> executeTool("sfx_analyze_registers", args))
-              .tool(packTexturesTool, args -> executeTool("sfx_pack_textures", args))
               .build();
     } else {
       this.syncServer = null;
@@ -703,22 +652,6 @@ public class RetroLspMcpServer implements AutoCloseable {
               String code = (String) args.get("code");
               String function = (String) args.get("function");
               yield registerAnalysis.analyze(code, uriStr, function);
-            }
-            case "sfx_pack_textures" -> {
-              if (texturePacker == null) {
-                throw new IllegalStateException(
-                    "Workspace root is required to execute texture packer");
-              }
-              String projectPath = (String) args.get("project_path");
-              String action = (String) args.get("action");
-              Boolean autoPack = (Boolean) args.get("auto_pack");
-              String outputDir = (String) args.get("output_dir");
-              @SuppressWarnings("unchecked")
-              List<String> imagePaths = (List<String>) args.get("image_paths");
-              Boolean autoQuantize = (Boolean) args.get("auto_quantize");
-              Boolean snapPalette = (Boolean) args.get("snap_palette");
-              yield texturePacker.run(
-                  projectPath, action, autoPack, outputDir, imagePaths, autoQuantize, snapPalette);
             }
             default -> throw new IllegalArgumentException("Unknown tool: " + name);
           };

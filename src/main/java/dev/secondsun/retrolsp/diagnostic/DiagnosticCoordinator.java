@@ -2,15 +2,17 @@ package dev.secondsun.retrolsp.diagnostic;
 
 import dev.secondsun.lsp.Diagnostic;
 import dev.secondsun.lsp.LanguageClient;
-import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.PublishDiagnosticsParams;
-import dev.secondsun.lsp.Range;
-import dev.secondsun.retro.util.ProjectService;
+import dev.secondsun.retro.util.WorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceSnapshot;
 import dev.secondsun.retro.util.diagnostic.SyntaxDiagnostic;
 import dev.secondsun.retro.util.diagnostic.SyntaxValidator;
+import dev.secondsun.retro.util.vo.DialectProfile;
 import dev.secondsun.retro.util.vo.TokenizedFile;
 import dev.secondsun.retrolsp.mcp.tools.SfxInvariantAuditor;
+import dev.secondsun.retrolsp.mcp.tools.SfxPerformanceAuditor;
 import dev.secondsun.sfxoptimizer.stack.StackDepthTracker;
+import dev.secondsun.sfxoptimizer.stack.StackViolation;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,76 +22,104 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Diagnostic Coordinator synthesizing diagnostics from three layers: 1. Syntax and Language
- * Invariants (retro-common SyntaxValidator) 2. FX3 Hardware Invariants (SfxInvariantAuditor) 3.
- * Stack Displacement and Calling Convention Invariants (sfx-optimizer StackDepthTracker)
+ * Coordinates diagnostic passes across four typed validation layers:
  *
- * <p>Emits diagnostics to connected LSP LanguageClient and formats results for MCP tools.
+ * <ol>
+ *   <li>Syntax and Language Invariants ({@code retro-common} {@link SyntaxValidator} &rarr; {@link
+ *       AuditFinding.Syntax})
+ *   <li>FX3 Hardware Invariants ({@link SfxInvariantAuditor} &rarr; {@link AuditFinding.Hardware})
+ *   <li>SuperFX Performance Heuristics ({@link SfxPerformanceAuditor} &rarr; {@link
+ *       AuditFinding.Performance})
+ *   <li>Stack Displacement &amp; Calling Convention Invariants ({@code sfx-optimizer} {@link
+ *       StackDepthTracker} &rarr; {@link AuditFinding.Stack})
+ * </ol>
+ *
+ * <p>Emits diagnostics to a connected LSP {@link LanguageClient} and formats typed results for MCP
+ * tools without mutating persistent workspace state on inline code snippets.
  */
 public class DiagnosticCoordinator {
 
   private static final Logger LOG = Logger.getLogger(DiagnosticCoordinator.class.getName());
 
-  private final ProjectService projectService;
+  private final WorkspaceIndex workspaceIndex;
   private final LanguageClient client;
   private final SyntaxValidator syntaxValidator;
   private final SfxInvariantAuditor invariantAuditor;
+  private final SfxPerformanceAuditor performanceAuditor;
   private final StackDepthTracker stackTracker;
 
   /**
-   * Constructs a DiagnosticCoordinator with a project service and optional LSP client.
+   * Constructs a {@link DiagnosticCoordinator} backed by a {@link WorkspaceIndex} and optional LSP
+   * client.
    *
-   * @param projectService the project service managing files and symbols
+   * @param workspaceIndex workspace index managing files, open buffers, and snapshots
    * @param client optional LSP client to publish diagnostics to
    */
-  public DiagnosticCoordinator(ProjectService projectService, LanguageClient client) {
-    this.projectService = Objects.requireNonNull(projectService);
+  public DiagnosticCoordinator(WorkspaceIndex workspaceIndex, LanguageClient client) {
+    this.workspaceIndex = Objects.requireNonNull(workspaceIndex);
     this.client = client;
     this.syntaxValidator = new SyntaxValidator();
-    this.invariantAuditor = new SfxInvariantAuditor(this.projectService);
+    this.invariantAuditor = new SfxInvariantAuditor(this.workspaceIndex);
+    this.performanceAuditor = new SfxPerformanceAuditor();
     this.stackTracker = new StackDepthTracker();
   }
 
   /**
-   * Constructs a standalone DiagnosticCoordinator without an LSP client.
+   * Constructs a standalone {@link DiagnosticCoordinator} without an LSP client.
    *
-   * @param projectService the project service managing files and symbols
+   * @param workspaceIndex workspace index managing files, open buffers, and snapshots
    */
-  public DiagnosticCoordinator(ProjectService projectService) {
-    this(projectService, null);
+  public DiagnosticCoordinator(WorkspaceIndex workspaceIndex) {
+    this(workspaceIndex, null);
   }
 
   /**
-   * Returns the underlying project service.
+   * Returns the underlying {@link WorkspaceIndex}.
    *
-   * @return the project service
+   * @return workspace index
    */
-  public ProjectService getProjectService() {
-    return projectService;
+  public WorkspaceIndex getWorkspaceIndex() {
+    return workspaceIndex;
   }
 
   /**
-   * Returns the connected language client, or null if running standalone.
+   * Returns the connected language client, or {@code null} if running standalone.
    *
-   * @return the language client or null
+   * @return language client or {@code null}
    */
   public LanguageClient getLanguageClient() {
     return client;
   }
 
   /**
-   * Audits assembly source code or document URI and returns a unified DiagnosticResult.
+   * Audits inline assembly source code (as an ephemeral transient snippet overlay) or a workspace
+   * document URI and returns a unified {@link DiagnosticResult}.
    *
-   * @param code raw assembly source code, or null to read from workspace
-   * @param uriStr workspace document URI string, or null
-   * @return the unified diagnostic audit result
+   * @param code raw assembly source code, or {@code null} to read from workspace
+   * @param uriStr workspace document URI string, or {@code null}
+   * @return unified diagnostic audit result
    */
   public DiagnosticResult auditResult(String code, String uriStr) {
-    TokenizedFile file = resolveFile(code, uriStr);
+    URI uri = uriStr != null && !uriStr.isBlank() ? URI.create(uriStr) : null;
+    WorkspaceSnapshot snapshot = workspaceIndex.snapshotFor(uri, code);
+    TokenizedFile file;
+    if (code != null && !code.isBlank()) {
+      URI targetUri = uri != null ? uri : WorkspaceSnapshot.TRANSIENT_SNIPPET_URI;
+      file = snapshot.file(targetUri);
+    } else if (uri != null) {
+      file = workspaceIndex.resolveFile(uri, null);
+      if (file == null || file.isEmpty()) {
+        throw new IllegalArgumentException("File not found in workspace: " + uri);
+      }
+    } else {
+      return new DiagnosticResult(true, List.of(), "Empty code: no diagnostics audited.");
+    }
+
     if (file == null || file.isEmpty()) {
       return new DiagnosticResult(true, List.of(), "Empty code: no diagnostics audited.");
     }
-    List<DiagnosticRecord> violations = audit(file);
+
+    List<DiagnosticRecord> violations = audit(file, snapshot);
     boolean valid = violations.stream().noneMatch(v -> v.severity() == DiagnosticSeverity.ERROR);
     String summary =
         String.format(
@@ -108,63 +138,107 @@ public class DiagnosticCoordinator {
   }
 
   /**
-   * Audits a TokenizedFile and collects structured SyntaxDiagnostics across all 3 layers.
+   * Audits a {@link TokenizedFile} against {@code snapshot} and returns typed {@link AuditFinding}
+   * records across all four validation passes.
    *
-   * @param file the tokenized file to audit
-   * @return sorted list of syntax diagnostics
+   * @param file tokenized file to audit
+   * @param snapshot point-in-time workspace snapshot
+   * @return sorted list of typed audit findings
    */
-  public List<SyntaxDiagnostic> auditDiagnostics(TokenizedFile file) {
+  public List<AuditFinding> auditFindings(TokenizedFile file, WorkspaceSnapshot snapshot) {
     if (file == null || file.isEmpty()) {
       return List.of();
     }
 
-    List<SyntaxDiagnostic> diagnostics = new ArrayList<>();
+    WorkspaceSnapshot activeSnap = snapshot != null ? snapshot : workspaceIndex.snapshot();
+    List<AuditFinding> findings = new ArrayList<>();
 
-    // Layer 1: Syntax & Language Invariants (Block balancing, arity, duplicate symbols)
+    // Layer 1: Syntax & Language Invariants
     try {
-      diagnostics.addAll(syntaxValidator.validate(file));
+      for (SyntaxDiagnostic sd : syntaxValidator.validate(file)) {
+        findings.add(AuditFinding.Syntax.from(sd));
+      }
     } catch (Exception e) {
       LOG.log(Level.WARNING, "Syntax validation error: " + e.getMessage(), e);
     }
 
-    // Layer 2: FX3 Hardware Invariants (8-NOP settling, 16-bit word alignment, no merge, modal
-    // lifetimes)
+    // Layer 2: FX3 Hardware Invariants (gated by DialectProfile.SUPERFX)
     try {
-      diagnostics.addAll(invariantAuditor.auditDiagnostics(file));
+      findings.addAll(invariantAuditor.auditHardwareFindings(file, activeSnap));
     } catch (Exception e) {
       LOG.log(Level.WARNING, "Hardware invariant audit error: " + e.getMessage(), e);
     }
 
-    // Layer 3: Stack Displacement & Calling Convention Invariants
+    // Layer 3: SuperFX Performance Heuristics (gated by DialectProfile.SUPERFX)
     try {
-      diagnostics.addAll(
-          stackTracker.auditFile(
-              file,
-              projectService,
-              projectService.getFileService(),
-              projectService.getSymbolService()));
-    } catch (Throwable t) {
-      LOG.log(Level.FINE, "Stack displacement tracking skipped: " + t.getMessage(), t);
+      findings.addAll(performanceAuditor.auditFindings(file));
+    } catch (Exception e) {
+      LOG.log(Level.WARNING, "Performance audit error: " + e.getMessage(), e);
     }
 
-    diagnostics.sort(
-        Comparator.comparingInt(SyntaxDiagnostic::line)
-            .thenComparingInt(SyntaxDiagnostic::columnStart));
-    return diagnostics;
+    // Layer 4: Stack Displacement & Calling Convention Invariants
+    if (hasSuperFxLines(file)) {
+      try {
+        for (StackViolation sv : stackTracker.auditFindings(file, activeSnap)) {
+          findings.add(AuditFinding.Stack.from(sv, file.uri()));
+        }
+      } catch (Throwable t) {
+        LOG.log(Level.FINE, "Stack displacement tracking skipped: " + t.getMessage(), t);
+      }
+    }
+
+    findings.sort(
+        Comparator.comparingInt(AuditFinding::line).thenComparingInt(AuditFinding::columnStart));
+    return findings;
   }
 
   /**
-   * Audits a TokenizedFile and collects diagnostic records across all 3 layers.
+   * Audits a {@link TokenizedFile} against the current workspace snapshot and returns typed {@link
+   * AuditFinding} records.
    *
-   * @param file the tokenized file to audit
+   * @param file tokenized file to audit
+   * @return sorted list of typed audit findings
+   */
+  public List<AuditFinding> auditFindings(TokenizedFile file) {
+    return auditFindings(file, workspaceIndex.snapshot());
+  }
+
+  /**
+   * Audits a {@link TokenizedFile} and collects structured {@link SyntaxDiagnostic}s across all
+   * layers.
+   *
+   * @param file tokenized file to audit
+   * @return sorted list of syntax diagnostics
+   */
+  public List<SyntaxDiagnostic> auditDiagnostics(TokenizedFile file) {
+    return auditFindings(file).stream().map(AuditFinding::toSyntaxDiagnostic).toList();
+  }
+
+  /**
+   * Audits a {@link TokenizedFile} against the current workspace snapshot and collects {@link
+   * DiagnosticRecord}s.
+   *
+   * @param file tokenized file to audit
    * @return list of diagnostic records
    */
   public List<DiagnosticRecord> audit(TokenizedFile file) {
-    return auditDiagnostics(file).stream().map(DiagnosticRecord::from).toList();
+    return audit(file, workspaceIndex.snapshot());
   }
 
   /**
-   * Collects LSP Diagnostic objects for a given workspace document URI.
+   * Audits a {@link TokenizedFile} against an explicit {@link WorkspaceSnapshot} and collects
+   * {@link DiagnosticRecord}s.
+   *
+   * @param file tokenized file to audit
+   * @param snapshot workspace snapshot
+   * @return list of diagnostic records
+   */
+  public List<DiagnosticRecord> audit(TokenizedFile file, WorkspaceSnapshot snapshot) {
+    return auditFindings(file, snapshot).stream().map(DiagnosticRecord::from).toList();
+  }
+
+  /**
+   * Collects LSP {@link Diagnostic} objects for a given workspace document URI.
    *
    * @param uri document URI to collect diagnostics for
    * @return list of LSP diagnostics
@@ -173,35 +247,20 @@ public class DiagnosticCoordinator {
     if (uri == null) {
       return List.of();
     }
-    TokenizedFile file = projectService.getFileContents(uri);
+    WorkspaceSnapshot snapshot = workspaceIndex.snapshot();
+    TokenizedFile file = snapshot.file(uri);
+    if ((file == null || file.isEmpty()) && workspaceIndex.isInsideWorkspace(uri)) {
+      file = workspaceIndex.getFileContents(uri);
+      snapshot = workspaceIndex.snapshot();
+    }
     if (file == null || file.isEmpty()) {
       return List.of();
     }
-    List<SyntaxDiagnostic> diagnostics = auditDiagnostics(file);
-    List<Diagnostic> lspDiagnostics = new ArrayList<>();
-    for (SyntaxDiagnostic sd : diagnostics) {
-      Diagnostic diag = new Diagnostic();
-      int line = Math.max(0, sd.line() - 1);
-      int col = Math.max(0, sd.columnStart());
-      int endCol = Math.max(col + 1, sd.columnEnd());
-      diag.range = new Range(new Position(line, col), new Position(line, endCol));
-      diag.severity =
-          switch (sd.severity()) {
-            case ERROR -> dev.secondsun.lsp.DiagnosticSeverity.Error;
-            case WARNING -> dev.secondsun.lsp.DiagnosticSeverity.Warning;
-            case INFO -> dev.secondsun.lsp.DiagnosticSeverity.Information;
-            case HINT -> dev.secondsun.lsp.DiagnosticSeverity.Hint;
-          };
-      diag.code = sd.code();
-      diag.source = "retroca65";
-      diag.message = sd.message();
-      lspDiagnostics.add(diag);
-    }
-    return lspDiagnostics;
+    return auditFindings(file, snapshot).stream().map(AuditFinding::toLspDiagnostic).toList();
   }
 
   /**
-   * Audits document and publishes diagnostics to connected LanguageClient if present.
+   * Audits document and publishes diagnostics to connected {@link LanguageClient} if present.
    *
    * @param uri URI of the document to publish diagnostics for
    */
@@ -218,7 +277,7 @@ public class DiagnosticCoordinator {
   }
 
   /**
-   * Clears diagnostics for closed document.
+   * Clears diagnostics for a closed document.
    *
    * @param uri URI of the closed document
    */
@@ -232,12 +291,14 @@ public class DiagnosticCoordinator {
     }
   }
 
-  private TokenizedFile resolveFile(String code, String uriStr) {
-    URI uri = uriStr != null ? URI.create(uriStr) : null;
-    TokenizedFile file = projectService.resolveFile(uri, code);
-    if ((file == null || file.isEmpty()) && uri != null && (code == null || code.isBlank())) {
-      throw new IllegalArgumentException("File not found in workspace: " + uri);
+  private static boolean hasSuperFxLines(TokenizedFile file) {
+    var tree = file.scopeTree();
+    int total = file.textLines();
+    for (int i = 0; i < total; i++) {
+      if (!tree.isMacroBodyLine(i) && tree.dialectAtLine(i) == DialectProfile.SUPERFX) {
+        return true;
+      }
     }
-    return file != null ? file : TokenizedFile.EMPTY;
+    return false;
   }
 }

@@ -2,9 +2,10 @@ package dev.secondsun.retrolsp.mcp;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.secondsun.retro.util.FileService;
-import dev.secondsun.retro.util.ProjectService;
-import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceIndex;
+import dev.secondsun.retrolsp.diagnostic.DiagnosticCoordinator;
+import dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool;
 import dev.secondsun.retrolsp.mcp.tools.SfxInvariantAuditor;
 import dev.secondsun.retrolsp.mcp.tools.SfxMacroExpanderTool;
 import dev.secondsun.retrolsp.mcp.tools.SfxRegisterAnalysisTool;
@@ -25,11 +26,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.FileHandler;
 import java.util.logging.Level;
@@ -38,10 +35,11 @@ import java.util.logging.SimpleFormatter;
 
 /**
  * Model Context Protocol (MCP) server for Retro-LSP, exposing SuperFX static analysis, macro
- * expansion, symbol lookup, and register analysis tools over stdio or custom transports backed by a
- * single shared persistent {@link ProjectService}.
+ * expansion, symbol lookup, reference search, and register analysis tools over stdio or custom
+ * transports backed by a single shared {@link WorkspaceIndex}.
  *
- * <p>Enforces a strict workspace sandbox boundary and performs lazy, on-demand directory indexing.
+ * <p>Enforces a strict workspace sandbox boundary and performs lazy, on-demand directory indexing
+ * and watcher registration without eager full-tree startup scans.
  */
 public class RetroLspMcpServer implements AutoCloseable {
 
@@ -200,72 +198,75 @@ public class RetroLspMcpServer implements AutoCloseable {
       """;
 
   private final ObjectMapper objectMapper;
-  private final ProjectService projectService;
+  private final WorkspaceIndex workspaceIndex;
   private final Path workspaceRoot;
-  private final dev.secondsun.retrolsp.diagnostic.DiagnosticCoordinator diagnosticCoordinator;
+  private final DiagnosticCoordinator diagnosticCoordinator;
   private final SfxInvariantAuditor invariantAuditor;
   private final SfxMacroExpanderTool macroExpander;
   private final SfxSymbolLookupTool symbolLookup;
-  private final dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool findReferences;
+  private final SfxFindReferencesTool findReferences;
   private final SfxRegisterAnalysisTool registerAnalysis;
   private final McpSyncServer syncServer;
   private final CountDownLatch stopLatch;
   private final WorkspaceFileWatcher fileWatcher;
-  private final CompletableFuture<Void> indexingFuture;
 
-  private final AtomicBoolean workspaceRootIndexed = new AtomicBoolean(false);
-  private final Set<Path> indexedDirectories = ConcurrentHashMap.newKeySet();
-
-  /** Constructs a standalone in-memory MCP server instance without transport (for tool testing). */
-  /** Default constructor initializing with an empty in-memory ProjectService. */
+  /** Default constructor initializing with an empty in-memory {@link DefaultWorkspaceIndex}. */
   public RetroLspMcpServer() {
-    this(new ProjectService(new FileService(), new SymbolService()), null, null);
+    this(new DefaultWorkspaceIndex(), null, null);
   }
 
   /**
-   * Constructs an in-memory MCP server with a custom ProjectService.
+   * Constructs an in-memory MCP server backed by a custom {@link WorkspaceIndex}.
    *
-   * @param projectService the project service managing files and symbols
+   * @param workspaceIndex workspace index managing files, buffers, and snapshots
    */
-  public RetroLspMcpServer(ProjectService projectService) {
-    this(projectService, null, null);
+  public RetroLspMcpServer(WorkspaceIndex workspaceIndex) {
+    this(
+        Objects.requireNonNull(workspaceIndex, "workspaceIndex"),
+        null,
+        workspaceIndex.getWorkspaceRoot());
   }
 
   /**
-   * Constructs an MCP server attached to the given transport and required workspace root.
+   * Constructs an MCP server attached to the given transport and workspace root boundary.
    *
-   * @param transport transport to communicate over (e.g. StdioServerTransport)
+   * @param transport transport to communicate over (e.g. {@link StdioServerTransport}), or {@code
+   *     null} for standalone
    * @param workspaceRoot canonical root directory boundary for workspace access
    */
   public RetroLspMcpServer(ServerMcpTransport transport, Path workspaceRoot) {
     this(
-        new ProjectService(new FileService(), new SymbolService(), workspaceRoot),
+        workspaceRoot != null
+            ? new DefaultWorkspaceIndex(workspaceRoot)
+            : new DefaultWorkspaceIndex(),
         transport,
         workspaceRoot);
   }
 
   /**
-   * Primary constructor initializing persistent services, workspace root boundary, background
-   * watcher, and MCP tool registrations.
+   * Primary constructor initializing persistent workspace index, workspace root boundary, lazy
+   * directory watcher listener, and MCP tool registrations without eager startup filesystem scans.
    *
-   * @param projectService shared project service
-   * @param transport transport to listen and serve on, or null for standalone
-   * @param workspaceRoot initial workspace directory boundary, or null for none
+   * @param workspaceIndex shared workspace index
+   * @param transport transport to listen and serve on, or {@code null} for standalone
+   * @param workspaceRoot initial workspace directory boundary, or {@code null} for none
    */
   public RetroLspMcpServer(
-      ProjectService projectService, ServerMcpTransport transport, Path workspaceRoot) {
+      WorkspaceIndex workspaceIndex, ServerMcpTransport transport, Path workspaceRoot) {
     this.objectMapper =
         new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    this.projectService = Objects.requireNonNull(projectService);
-    this.workspaceRoot = workspaceRoot != null ? workspaceRoot.toAbsolutePath().normalize() : null;
-    this.diagnosticCoordinator =
-        new dev.secondsun.retrolsp.diagnostic.DiagnosticCoordinator(this.projectService);
-    this.invariantAuditor = new SfxInvariantAuditor(this.projectService);
-    this.macroExpander = new SfxMacroExpanderTool(this.projectService);
-    this.symbolLookup = new SfxSymbolLookupTool(this.projectService);
-    this.findReferences =
-        new dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool(this.projectService);
-    this.registerAnalysis = new SfxRegisterAnalysisTool(this.projectService);
+    this.workspaceIndex = Objects.requireNonNull(workspaceIndex, "workspaceIndex");
+    Path resolvedRoot =
+        workspaceRoot != null
+            ? workspaceRoot.toAbsolutePath().normalize()
+            : this.workspaceIndex.getWorkspaceRoot();
+    this.workspaceRoot = resolvedRoot;
+    this.diagnosticCoordinator = new DiagnosticCoordinator(this.workspaceIndex);
+    this.invariantAuditor = new SfxInvariantAuditor(this.workspaceIndex);
+    this.macroExpander = new SfxMacroExpanderTool(this.workspaceIndex);
+    this.symbolLookup = new SfxSymbolLookupTool(this.workspaceIndex);
+    this.findReferences = new SfxFindReferencesTool(this.workspaceIndex);
+    this.registerAnalysis = new SfxRegisterAnalysisTool(this.workspaceIndex);
     this.stopLatch = new CountDownLatch(1);
 
     if (transport != null) {
@@ -284,7 +285,7 @@ public class RetroLspMcpServer implements AutoCloseable {
       Tool expandTool =
           new Tool(
               "sfx_expand_macro",
-              "Expands CA65 and X-GSU macros (.macro, .define, function, for, stack operations, etc.) into a concrete instruction stream using the shared workspace FileService.",
+              "Expands CA65 and X-GSU macros (.macro, .define, function, for, stack operations, etc.) into a concrete instruction stream using the shared WorkspaceIndex.",
               EXPAND_MACRO_SCHEMA);
 
       Tool lookupTool =
@@ -325,7 +326,7 @@ public class RetroLspMcpServer implements AutoCloseable {
     WorkspaceFileWatcher watcher = null;
     if (this.workspaceRoot != null) {
       try {
-        watcher = new WorkspaceFileWatcher(this.projectService, this.workspaceRoot);
+        watcher = new WorkspaceFileWatcher(this.workspaceIndex, this.workspaceRoot);
       } catch (Exception e) {
         LOG.log(
             Level.WARNING,
@@ -335,17 +336,7 @@ public class RetroLspMcpServer implements AutoCloseable {
     }
     this.fileWatcher = watcher;
     if (this.fileWatcher != null) {
-      this.projectService.setDirectoryIndexedListener(
-          dir -> this.fileWatcher.registerDirectory(dir));
-    }
-
-    if (this.workspaceRoot != null && Files.isDirectory(this.workspaceRoot)) {
-      this.indexingFuture =
-          CompletableFuture.runAsync(
-              this::indexWorkspaceRoot,
-              runnable -> Thread.ofVirtual().name("mcp-workspace-indexer").start(runnable));
-    } else {
-      this.indexingFuture = CompletableFuture.completedFuture(null);
+      this.workspaceIndex.setDirectoryIndexedListener(this.fileWatcher::watchDirectory);
     }
   }
 
@@ -354,7 +345,7 @@ public class RetroLspMcpServer implements AutoCloseable {
    * given required workspace root.
    *
    * @param workspaceRoot required root directory of the workspace
-   * @return a running RetroLspMcpServer instance
+   * @return a running {@link RetroLspMcpServer} instance
    */
   public static RetroLspMcpServer createStdio(Path workspaceRoot) {
     Objects.requireNonNull(workspaceRoot, "workspaceRoot is required when starting MCP server");
@@ -366,10 +357,10 @@ public class RetroLspMcpServer implements AutoCloseable {
 
   /**
    * Configures standard Java logging (JUL) for the MCP server to output plain text logs (INFO level
-   * and higher) to a temporary file in java.io.tmpdir with the naming format
-   * retro-lsp-msp.date.time.log.
+   * and higher) to a temporary file in {@code java.io.tmpdir} with the naming format {@code
+   * retro-lsp-msp.date.time.log}.
    *
-   * @return the path to the configured log file, or null if configuration failed
+   * @return the path to the configured log file, or {@code null} if configuration failed
    */
   public static synchronized Path configureLogging() {
     if (loggingConfigured.get()) {
@@ -424,7 +415,7 @@ public class RetroLspMcpServer implements AutoCloseable {
   /**
    * Returns the path to the currently active log file, if logging was configured.
    *
-   * @return log file path or null
+   * @return log file path or {@code null}
    */
   public static synchronized Path getLogFilePath() {
     return currentLogFile;
@@ -442,18 +433,18 @@ public class RetroLspMcpServer implements AutoCloseable {
   }
 
   /**
-   * Returns the underlying project service.
+   * Returns the underlying {@link WorkspaceIndex}.
    *
-   * @return the project service
+   * @return workspace index
    */
-  public ProjectService getProjectService() {
-    return projectService;
+  public WorkspaceIndex getWorkspaceIndex() {
+    return workspaceIndex;
   }
 
   /**
    * Returns the configured workspace root boundary.
    *
-   * @return the workspace root path
+   * @return the workspace root path, or {@code null}
    */
   public Path getWorkspaceRoot() {
     return workspaceRoot;
@@ -464,7 +455,7 @@ public class RetroLspMcpServer implements AutoCloseable {
    *
    * @return the diagnostic coordinator
    */
-  public dev.secondsun.retrolsp.diagnostic.DiagnosticCoordinator getDiagnosticCoordinator() {
+  public DiagnosticCoordinator getDiagnosticCoordinator() {
     return diagnosticCoordinator;
   }
 
@@ -475,64 +466,19 @@ public class RetroLspMcpServer implements AutoCloseable {
    * @param uri URI to validate
    */
   public void validateUriWithinWorkspace(URI uri) {
-    projectService.validateUriWithinWorkspace(uri);
-  }
-
-  private void indexWorkspaceRoot() {
-    if (workspaceRoot == null) {
-      return;
-    }
-    if (workspaceRootIndexed.compareAndSet(false, true)) {
-      try {
-        projectService.includeDir(workspaceRoot.toUri());
-        indexedDirectories.add(workspaceRoot);
-        if (fileWatcher != null) {
-          fileWatcher.registerDirectory(workspaceRoot);
-        }
-      } catch (Exception e) {
-        LOG.log(Level.WARNING, "Failed indexing for workspace root: " + workspaceRoot, e);
-      }
-    }
+    workspaceIndex.validateUriWithinWorkspace(uri);
   }
 
   /**
-   * Ensures that the target file or directory is indexed in the ProjectService on-demand.
+   * Ensures that the target file or directory is indexed in the {@link WorkspaceIndex} on demand.
    *
-   * @param uri file URI to ensure indexed, or null to trigger lazy root indexing
+   * @param uri file URI to ensure indexed, or {@code null} to trigger lazy root indexing
    */
   public void ensureIndexed(URI uri) {
     if (workspaceRoot == null) {
       return;
     }
-    if (uri != null && "file".equalsIgnoreCase(uri.getScheme())) {
-      validateUriWithinWorkspace(uri);
-      if (!uri.toString().startsWith("file:///snippet")) {
-        try {
-          Path path = Path.of(uri).toAbsolutePath().normalize();
-          Path dir = Files.isDirectory(path) ? path : path.getParent();
-          if (dir != null
-              && dir.startsWith(workspaceRoot)
-              && Files.isDirectory(dir)
-              && indexedDirectories.add(dir)) {
-            projectService.includeDir(dir.toUri());
-            if (fileWatcher != null) {
-              fileWatcher.registerDirectory(dir);
-            }
-          }
-        } catch (Exception e) {
-          LOG.log(Level.WARNING, "Failed to on-demand index directory for URI: " + uri, e);
-        }
-      }
-    } else if (uri == null) {
-      indexWorkspaceRoot();
-      if (indexingFuture != null) {
-        try {
-          indexingFuture.get(30, TimeUnit.SECONDS);
-        } catch (Exception e) {
-          LOG.log(Level.FINE, "Interrupted or timed out waiting for initial workspace indexing", e);
-        }
-      }
-    }
+    workspaceIndex.ensureIndexed(uri);
   }
 
   private URI resolveTargetUri(String uriStr, String pathStr, boolean usePathAsFileTarget) {
@@ -544,7 +490,7 @@ public class RetroLspMcpServer implements AutoCloseable {
       return null;
     }
     try {
-      if (candidate.startsWith("file:")) {
+      if (candidate.startsWith("file:") || candidate.startsWith("snippet:")) {
         return URI.create(candidate);
       }
       Path path = Path.of(candidate);
@@ -563,11 +509,11 @@ public class RetroLspMcpServer implements AutoCloseable {
   }
 
   /**
-   * Executes a tool by name with arguments and formats the result as an MCP CallToolResult.
+   * Executes a tool by name with arguments and formats the result as an MCP {@link CallToolResult}.
    *
    * @param name tool name
    * @param args tool arguments
-   * @return CallToolResult containing serialized JSON or error
+   * @return {@link CallToolResult} containing serialized JSON or error
    */
   public CallToolResult executeTool(String name, Map<String, Object> args) {
     try {

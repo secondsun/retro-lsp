@@ -65,12 +65,13 @@ The extension and language server can be configured through the following settin
 - **Control Command Completion**: Contextual autocompletion for common CA65 control commands and directives.
 - **Documentation Hovers**: Accurate subroutine signatures, doc comments, and opcode/directive documentation.
 - **Model Context Protocol (MCP) Server**: Run `launcher --mcp --workspace <path>` to expose SuperFX static analysis tools over stdio:
-  - **`--workspace <path>` (Required)**: Specifies the project root directory and establishes a secure sandbox boundary. All file URIs queried by MCP tools must reside within this directory or its subdirectories (access outside this boundary is rejected). Files within the workspace are indexed lazily on-demand and kept synchronized with disk modifications via a background file watcher.
+  - **`--workspace <path>` (Required)**: Specifies the project root directory and establishes a secure sandbox boundary. All file URIs queried by MCP tools must reside within this directory or its subdirectories (access outside this boundary is rejected). Directories within the workspace are indexed and watched lazily on-demand via `WorkspaceIndex` and `WorkspaceFileWatcher` without eager full-tree startup scans, while inline `code` arguments execute as ephemeral transient snippets over `WorkspaceSnapshot` without mutating persistent workspace state.
   - **`--log` (Optional)**: Enables file logging using standard Java logging (`java.util.logging`). Writes plain text logs (INFO level and higher) to a temporary file in `java.io.tmpdir` named `retro-lsp-msp.<date>.<time>.log`.
-  - `sfx_audit_invariants`: Audits code for 8-NOP pipeline settling before `stop`, 16-bit word alignment on `ldw`/`stw`, lack of hardware `MERGE` on FX3, and modal instruction lifetimes (`with`, `to`, `from`). Accepts raw `code` or existing file `uri`.
-  - `sfx_expand_macro`: Expands X-GSU macros (`function`, `for`, `if_lt`, etc.) to ca65 SuperFX instructions via `CA65MacroExpander`, resolving workspace `.include` dependencies.
-  - `sfx_lookup_symbol`: Resolves symbol definitions, scope hierarchies, and doc comments extracted by `retro-common`.
-  - `sfx_analyze_registers`: Live-range intervals, register pressure, and suggested register colorings via `sfx-optimizer`.
+  - `sfx_audit_diagnostics` (and alias `sfx_audit_invariants`): Audits code across four typed `AuditFinding` passes — syntax/block validation, dialect-gated FX3 hardware invariants (8-NOP pipeline settling before `stop`, 16-bit word alignment on `ldw`/`stw`, lack of hardware `MERGE` on FX3, `alt1`–`alt3` + `with`/`to`/`from` modal lifetimes), SuperFX performance heuristics (`CACHE_IN_LOOP`, `CACHE_BLOCK_OVERFLOW`, `CALL_IN_HOT_LOOP`), and `StackDepthTracker` stack displacement invariants. Accepts inline `code`, file `uri`, or workspace-relative `path`.
+  - `sfx_expand_macro`: Expands CA65 and X-GSU macros (`[inline] function`, `for`, `if_lt`, stack macros, `.macro`, `.define`) to concrete SuperFX instructions via `CA65MacroExpander` against an immutable `WorkspaceSnapshot`.
+  - `sfx_lookup_symbol`: Resolves symbol definitions, scope hierarchies, 1-based line numbers, and doc comments across `WorkspaceSnapshot`.
+  - `sfx_find_references`: Finds usages, `call` sites, macro invocations, and scoped references across `WorkspaceSnapshot`.
+  - `sfx_analyze_registers`: Computes 1-based live-range intervals, `ScopeCfg` basic blocks, register pressure, and Chaitin-Briggs register allocations via `SfxProgramAnalyzer`.
 - **Syntax Highlighting**: Comprehensive SNES and CA65 grammar highlighting based on libSFX syntaxes.
 
 

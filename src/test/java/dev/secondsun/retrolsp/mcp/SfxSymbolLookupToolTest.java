@@ -84,11 +84,7 @@ public class SfxSymbolLookupToolTest {
     java.nio.file.Files.writeString(fixture.resolve("var.i"), "dupSym = 1\n");
     java.nio.file.Files.writeString(real.resolve("var.i"), "\n\ndupSym = 2\n");
 
-    var ps =
-        new dev.secondsun.retro.util.ProjectService(
-            new dev.secondsun.retro.util.FileService(),
-            new dev.secondsun.retro.util.SymbolService(),
-            root);
+    var ps = new dev.secondsun.retro.util.DefaultWorkspaceIndex(root);
     ps.includeDir(root.toUri());
     var t = new SfxSymbolLookupTool(ps);
 
@@ -103,5 +99,15 @@ public class SfxSymbolLookupToolTest {
     SymbolLookupResult capped = t.lookup("dupSym", null, null, null, null, 1);
     assertEquals(1, capped.allLocations().size());
     assertEquals(2, capped.totalLocations());
+
+    // Transient snippet resolves both snippet-local and workspace symbols without mutating index
+    int filesBefore = ps.snapshot().effectiveFiles().size();
+    SymbolLookupResult localSnippet =
+        t.lookup("ephemeralSym", "ephemeralSym:\n  nop\n", null, null);
+    assertTrue(localSnippet.found());
+    SymbolLookupResult wsFromSnippet = t.lookup("dupSym", "ephemeralSym:\n  nop\n", null, null);
+    assertTrue(wsFromSnippet.found());
+    assertEquals(filesBefore, ps.snapshot().effectiveFiles().size());
+    assertFalse(t.lookup("ephemeralSym", null, null, null).found());
   }
 }

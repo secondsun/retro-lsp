@@ -1,87 +1,107 @@
 package dev.secondsun.retrolsp.mcp.tools;
 
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.FunctionSyntaxHelper;
 import dev.secondsun.retro.util.Token;
 import dev.secondsun.retro.util.TokenType;
+import dev.secondsun.retro.util.WorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceSnapshot;
 import dev.secondsun.retro.util.diagnostic.DiagnosticSeverity;
 import dev.secondsun.retro.util.diagnostic.SyntaxDiagnostic;
+import dev.secondsun.retro.util.vo.DialectProfile;
 import dev.secondsun.retro.util.vo.TokenizedFile;
 import dev.secondsun.retro.util.vo.Tokens;
+import dev.secondsun.retrolsp.diagnostic.AuditFinding;
 import java.net.URI;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Audits SuperFX (FX3) assembly code for critical hardware invariants: 1. 8-NOP pipeline settling
- * before 'stop' 2. 16-bit word aligned addresses for 'ldw' / 'stw' 3. Absence of unsupported
- * hardware 'MERGE' instruction 4. Correct modal instruction scope ('with', 'to', 'from')
+ * MCP Tool and static analyzer: {@code sfx_audit_invariants}.
+ *
+ * <p>Statically validates SuperFX 3 (FX3 / GSU) hardware invariants on assembly source code:
+ *
+ * <ol>
+ *   <li><b>8-NOP Pipeline Settling</b>: Requires at least 8 {@code nop} instructions immediately
+ *       before {@code stop} (ignoring intervening labels/comments), plus dual {@code rpix} pixel
+ *       cache flush checks after {@code plot}.
+ *   <li><b>16-bit Word Alignment</b>: Flags odd literal byte offsets/addresses on {@code ldw} and
+ *       {@code stw}.
+ *   <li><b>No Hardware MERGE</b>: Flags usage of the unsupported {@code merge} instruction on FX3
+ *       targets.
+ *   <li><b>Modal Instruction Scope</b>: Audits {@code with}, {@code to}, {@code from}, and {@code
+ *       alt1}–{@code alt3} composition, overwritten prefixes, dangling prefixes, destructive {@code
+ *       with} comparisons, and unintentional {@code from Rn; add/sub #0} writes to {@code R0}.
+ *   <li><b>Memory &amp; Immediate Safety</b>: Audits {@code ldw}/{@code ldb} loads from ROM
+ *       segments, non-symbolic {@code iwt r15} jump targets, and unmasked negative immediates on
+ *       {@code ibt}.
+ * </ol>
  */
 public class SfxInvariantAuditor {
 
   /** Severity level for invariant violations. */
   public enum Severity {
-    /** Hardware constraint error that must be resolved. */
+    /** Hard hardware constraint violation that causes miscompilation or runtime corruption. */
     ERROR,
-    /** Warning or optimization recommendation. */
+    /** Potential hazard or performance anti-pattern. */
     WARNING
   }
 
   /**
-   * Represents an individual invariant violation detected in assembly source.
+   * Represents a single hardware or performance invariant violation.
    *
    * @param line 1-based line number
-   * @param columnStart start column
-   * @param columnEnd end column
-   * @param rule rule identifier (e.g. SFX_NO_MERGE, SFX_8NOP_BEFORE_STOP)
-   * @param severity severity level
+   * @param columnStart 0-based start column
+   * @param columnEnd 0-based end column
+   * @param rule rule identifier
+   * @param severity violation severity
    * @param message human-readable explanation
    */
   public record InvariantViolation(
       int line, int columnStart, int columnEnd, String rule, Severity severity, String message) {
+
     /**
-     * Convenience constructor defaulting columns to 0 and 1.
+     * Convenience constructor with default columns [0, 80].
      *
      * @param line 1-based line number
      * @param rule rule identifier
-     * @param severity severity level
+     * @param severity violation severity
      * @param message human-readable explanation
      */
     public InvariantViolation(int line, String rule, Severity severity, String message) {
-      this(line, 0, 1, rule, severity, message);
+      this(line, 0, 80, rule, severity, message);
     }
 
     /**
-     * Converts this violation into a retro-common SyntaxDiagnostic.
+     * Converts this violation to a {@link SyntaxDiagnostic}.
      *
-     * @param uri URI of the source file
-     * @return converted syntax diagnostic
+     * @param uri document URI
+     * @return converted {@link SyntaxDiagnostic}
      */
     public SyntaxDiagnostic toSyntaxDiagnostic(URI uri) {
-      DiagnosticSeverity sev =
+      DiagnosticSeverity diagSeverity =
           severity == Severity.ERROR ? DiagnosticSeverity.ERROR : DiagnosticSeverity.WARNING;
-      return new SyntaxDiagnostic(
-          uri,
-          Math.max(1, line),
-          Math.max(0, columnStart),
-          Math.max(columnStart + 1, columnEnd),
-          rule,
-          sev,
-          message);
+      return new SyntaxDiagnostic(uri, line, columnStart, columnEnd, rule, diagSeverity, message);
     }
   }
 
   /**
-   * Result of an invariant audit containing status, violations, and summary.
+   * Overall result of an invariant audit run.
    *
-   * @param valid whether the audit passed without errors
-   * @param violations list of invariant violations
-   * @param summary human-readable summary
+   * @param valid true when zero {@link Severity#ERROR} violations were found
+   * @param violations all discovered hardware and performance violations
+   * @param summary human-readable summary string
    */
   public record AuditResult(boolean valid, List<InvariantViolation> violations, String summary) {}
 
   private static final Pattern HEX_LITERAL = Pattern.compile("(?i)(?:\\$|0x)([0-9a-f]+)");
-  private static final Pattern DEC_LITERAL = Pattern.compile("\\b(\\d+)\\b");
-  private static final Pattern BIN_LITERAL = Pattern.compile("%([01]+)");
   private static final Pattern IBT_NEGATIVE_IMM =
       Pattern.compile(
           "(?i)\\bibt\\s+r(?:1[0-5]|[0-9])\\s*,\\s*#\\s*(-\\s*(?:\\$[0-9a-f]+|0x[0-9a-f]+|%[01]+|\\d+))");
@@ -89,27 +109,25 @@ public class SfxInvariantAuditor {
   private record PendingModal(
       String opcode, int line, int columnStart, int columnEnd, boolean inDelaySlot) {}
 
-  private final dev.secondsun.retro.util.ProjectService projectService;
+  private final WorkspaceIndex workspaceIndex;
+  private final SfxPerformanceAuditor performanceAuditor = new SfxPerformanceAuditor();
 
-  /** Default constructor initializing with an empty in-memory ProjectService. */
+  /** Default constructor initializing with an empty in-memory {@link DefaultWorkspaceIndex}. */
   public SfxInvariantAuditor() {
-    this(
-        new dev.secondsun.retro.util.ProjectService(
-            new dev.secondsun.retro.util.FileService(),
-            new dev.secondsun.retro.util.SymbolService()));
+    this(new DefaultWorkspaceIndex());
   }
 
   /**
-   * Constructs an auditor with the provided project service.
+   * Constructs an auditor backed by the provided {@link WorkspaceIndex}.
    *
-   * @param projectService project service for resolving files and symbols
+   * @param workspaceIndex workspace index for resolving files and cross-file symbol segments
    */
-  public SfxInvariantAuditor(dev.secondsun.retro.util.ProjectService projectService) {
-    this.projectService = Objects.requireNonNull(projectService);
+  public SfxInvariantAuditor(WorkspaceIndex workspaceIndex) {
+    this.workspaceIndex = Objects.requireNonNull(workspaceIndex);
   }
 
   /**
-   * Audits raw assembly source code without workspace context.
+   * Audits raw assembly source code without mutating workspace state.
    *
    * @param code raw assembly code string
    * @return audit result
@@ -119,26 +137,37 @@ public class SfxInvariantAuditor {
   }
 
   /**
-   * Audits assembly source code or document URI.
+   * Audits inline assembly source code (as a transient snippet overlay) or a workspace document
+   * URI.
    *
-   * @param code raw assembly code string or null
-   * @param uriStr document URI string or null
+   * @param code raw assembly code string or {@code null}
+   * @param uriStr document URI string or {@code null}
    * @return audit result
    */
   public AuditResult audit(String code, String uriStr) {
-    java.net.URI uri = uriStr != null ? java.net.URI.create(uriStr) : null;
-    TokenizedFile file = projectService.resolveFile(uri, code);
-    if (file == null || file.isEmpty()) {
-      if (uri != null && (code == null || code.isBlank())) {
+    URI uri = uriStr != null && !uriStr.isBlank() ? URI.create(uriStr) : null;
+    WorkspaceSnapshot snapshot = workspaceIndex.snapshotFor(uri, code);
+    TokenizedFile file;
+    if (code != null && !code.isBlank()) {
+      URI lookupUri = uri != null ? uri : WorkspaceSnapshot.TRANSIENT_SNIPPET_URI;
+      file = snapshot.file(lookupUri);
+    } else if (uri != null) {
+      file = workspaceIndex.resolveFile(uri, null);
+      if (file == null || file.isEmpty()) {
         throw new IllegalArgumentException("File not found in workspace: " + uri);
       }
+    } else {
       return new AuditResult(true, List.of(), "Empty code: no invariants audited.");
     }
-    return audit(file);
+
+    if (file == null || file.isEmpty()) {
+      return new AuditResult(true, List.of(), "Empty code: no invariants audited.");
+    }
+    return audit(file, snapshot);
   }
 
   /**
-   * Audits a tokenized file and produces a list of SyntaxDiagnostics.
+   * Audits a tokenized file and produces a list of {@link SyntaxDiagnostic}s.
    *
    * @param file the tokenized file to audit
    * @return list of syntax diagnostics
@@ -147,22 +176,69 @@ public class SfxInvariantAuditor {
     if (file == null || file.isEmpty()) {
       return List.of();
     }
-    AuditResult res = audit(file);
+    AuditResult res = audit(file, workspaceIndex.snapshot());
     URI uri = file.uri();
     return res.violations().stream().map(v -> v.toSyntaxDiagnostic(uri)).toList();
   }
 
   /**
-   * Audits a tokenized file and produces an AuditResult.
+   * Audits a tokenized file against the current workspace snapshot.
    *
    * @param file the tokenized file to audit
-   * @return audit result
+   * @return audit result combining hardware and performance checks
    */
   public AuditResult audit(TokenizedFile file) {
+    return audit(file, workspaceIndex.snapshot());
+  }
+
+  /**
+   * Audits a tokenized file against an explicit {@link WorkspaceSnapshot}.
+   *
+   * @param file the tokenized file to audit
+   * @param snapshot point-in-time workspace snapshot for symbol resolution
+   * @return audit result combining hardware and performance checks
+   */
+  public AuditResult audit(TokenizedFile file, WorkspaceSnapshot snapshot) {
     if (file == null || file.isEmpty()) {
       return new AuditResult(true, List.of(), "Empty code: no invariants audited.");
     }
 
+    List<InvariantViolation> violations = new ArrayList<>();
+    for (AuditFinding.Hardware hw : auditHardwareFindings(file, snapshot)) {
+      Severity sev =
+          hw.severity() == dev.secondsun.retrolsp.diagnostic.DiagnosticSeverity.ERROR
+              ? Severity.ERROR
+              : Severity.WARNING;
+      violations.add(
+          new InvariantViolation(
+              hw.line(), hw.columnStart(), hw.columnEnd(), hw.rule(), sev, hw.message()));
+    }
+    violations.addAll(performanceAuditor.audit(file));
+
+    boolean valid = violations.stream().noneMatch(v -> v.severity() == Severity.ERROR);
+    String summary =
+        String.format(
+            "SuperFX Invariants Audit: %d violation(s) found (%s).",
+            violations.size(), valid ? "PASSED" : "FAILED");
+
+    return new AuditResult(valid, violations, summary);
+  }
+
+  /**
+   * Audits only SuperFX hardware invariants on {@code file}, returning typed {@link
+   * AuditFinding.Hardware} records gated by {@link DialectProfile#SUPERFX}.
+   *
+   * @param file tokenized file to audit
+   * @param snapshot workspace snapshot for resolving cross-file symbol segments
+   * @return list of typed hardware invariant findings
+   */
+  public List<AuditFinding.Hardware> auditHardwareFindings(
+      TokenizedFile file, WorkspaceSnapshot snapshot) {
+    if (file == null || file.isEmpty()) {
+      return List.of();
+    }
+
+    URI uri = file.uri();
     List<InvariantViolation> violations = new ArrayList<>();
     String lastMnemonic = null;
     int consecutiveNops = 0;
@@ -173,24 +249,38 @@ public class SfxInvariantAuditor {
     PendingModal pendingWith = null;
 
     int totalLines = file.textLines();
+    var scopeTree = file.scopeTree();
     Map<String, String> symbolSegments = collectSymbolSegments(file);
     Map<String, String> regLoadedSymbol = new HashMap<>();
 
     for (int lineIdx = 0; lineIdx < totalLines; lineIdx++) {
+      if (scopeTree.isMacroBodyLine(lineIdx)) {
+        continue;
+      }
+      if (scopeTree.dialectAtLine(lineIdx) != DialectProfile.SUPERFX) {
+        consecutiveNops = 0;
+        hasPlot = false;
+        rpixAfterPlot = 0;
+        pendingFrom = null;
+        pendingTo = null;
+        pendingWith = null;
+        lastMnemonic = null;
+        regLoadedSymbol.clear();
+        continue;
+      }
+
       int lineNum = lineIdx + 1; // 1-based line number
       Tokens lineTokens = file.getLine(lineIdx);
       if (lineTokens == null || lineTokens.tokens().isEmpty()) {
         continue;
       }
 
-      // Check if line defines a label (labels emit 0 bytes and do not break straight-line NOP
-      // settling)
+      // Labels emit 0 bytes and do not break straight-line NOP settling or modal state
       if (file.isLabelOnly(lineIdx)) {
         regLoadedSymbol.clear();
         continue;
       }
 
-      // Find primary mnemonic/instruction
       Optional<Token> opcodeOpt = file.getPrimaryOpcode(lineIdx);
       if (opcodeOpt.isEmpty()) {
         // Directives (.segment, .byte, etc.) or pure comments
@@ -202,10 +292,13 @@ public class SfxInvariantAuditor {
       String rawLine = file.getLineText(lineIdx) != null ? file.getLineText(lineIdx).trim() : "";
       int opcodeTokenIdx = tokens.indexOf(opcodeToken);
       if (opcodeTokenIdx > 0) {
-        // Line has a leading label before the opcode
         regLoadedSymbol.clear();
       }
       String mnemonic = opcodeToken.text().toLowerCase(Locale.ROOT);
+      List<Token> tail =
+          opcodeTokenIdx >= 0 ? tokens.subList(opcodeTokenIdx, tokens.size()) : tokens;
+      boolean isFnHeader = FunctionSyntaxHelper.isFunction(tail);
+      boolean isEndFn = FunctionSyntaxHelper.isEndFunction(tail);
 
       // Check Invariant 3: NO_HARDWARE_MERGE
       if ("merge".equals(mnemonic)) {
@@ -221,8 +314,7 @@ public class SfxInvariantAuditor {
                 "Hardware 'MERGE' instruction is not supported on SuperFX 3 (FX3). Use byte manipulation workarounds ('hib', 'lob', 'swap', 'or') instead."));
       }
 
-      // Check Invariant 1: 8-NOP pipeline settling before 'stop' (and pixel cache flush when 'plot'
-      // is used)
+      // Check Invariant 1: 8-NOP pipeline settling before 'stop' & pixel cache flush after 'plot'
       if ("plot".equals(mnemonic)) {
         hasPlot = true;
         rpixAfterPlot = 0;
@@ -266,13 +358,12 @@ public class SfxInvariantAuditor {
 
       // Check Invariant 2: WORD_ALIGNMENT_LDW_STW
       if ("ldw".equals(mnemonic) || "stw".equals(mnemonic)) {
-        checkWordAlignment(lineNum, mnemonic, tokens, opcodeTokenIdx, rawLine, violations);
+        checkWordAlignment(lineNum, mnemonic, tokens, opcodeTokenIdx, violations);
       }
 
-      // Check Invariant 5: ROM_SYMBOL_RAM_LOAD & IWT_R15_NON_LABEL
+      // Check Invariant 5: ROM_SYMBOL_RAM_LOAD, IWT_R15_NON_LABEL, IBT_NEGATIVE_IMMEDIATE
       if ("iwt".equals(mnemonic)) {
-        handleIwtInstruction(
-            lineNum, tokens, opcodeTokenIdx, file, symbolSegments, regLoadedSymbol, violations);
+        handleIwtInstruction(lineNum, tokens, opcodeTokenIdx, regLoadedSymbol, violations);
       } else if ("ldw".equals(mnemonic) || "ldb".equals(mnemonic)) {
         checkRomSymbolRamLoad(
             lineNum,
@@ -280,10 +371,10 @@ public class SfxInvariantAuditor {
             tokens,
             opcodeTokenIdx,
             file,
+            snapshot,
             symbolSegments,
             regLoadedSymbol,
             violations);
-        // If ldw/ldb clobbers a target register via 'to'/'with' or R0, clear its tracked symbol
         String pendingReg = "r0";
         if (pendingTo != null) {
           pendingReg = extractModalTarget(file, pendingTo.line() - 1);
@@ -322,14 +413,11 @@ public class SfxInvariantAuditor {
                         negLiteral, negLiteral)));
           }
         }
-      } else if ("call".equals(mnemonic)
-          || "function".equals(mnemonic)
-          || "endfunction".equals(mnemonic)
-          || "return".equals(mnemonic)) {
+      } else if ("call".equals(mnemonic) || isFnHeader || isEndFn || "return".equals(mnemonic)) {
         regLoadedSymbol.clear();
       }
 
-      // Check Invariant 4: MODAL_INSTRUCTION_SCOPE ('with', 'to', 'from')
+      // Check Invariant 4: MODAL_INSTRUCTION_SCOPE ('with', 'to', 'from', and 'alt1'..'alt3')
       int modalColStart = opcodeToken.getStartIndex();
       int modalColEnd =
           tokens.isEmpty()
@@ -340,9 +428,14 @@ public class SfxInvariantAuditor {
       }
 
       boolean inDelaySlot = isBranchOrLoop(lastMnemonic);
-      boolean isModal = "with".equals(mnemonic) || "to".equals(mnemonic) || "from".equals(mnemonic);
+      boolean isRegModal =
+          "with".equals(mnemonic) || "to".equals(mnemonic) || "from".equals(mnemonic);
+      boolean isAltModal =
+          "alt1".equals(mnemonic) || "alt2".equals(mnemonic) || "alt3".equals(mnemonic);
 
-      if (isModal) {
+      if (isAltModal) {
+        // alt1..alt3 compose with active from/to/with prefixes without consuming them!
+      } else if (isRegModal) {
         if ("from".equals(mnemonic)) {
           if (pendingWith != null) {
             violations.add(
@@ -465,7 +558,7 @@ public class SfxInvariantAuditor {
                       Severity.ERROR,
                       message));
             }
-          } else if (isControlInstruction(mnemonic)) {
+          } else if (isControlInstruction(mnemonic) || isFnHeader || isEndFn) {
             for (PendingModal pm : activeModals) {
               if (!pm.inDelaySlot()) {
                 violations.add(
@@ -482,8 +575,6 @@ public class SfxInvariantAuditor {
             }
           }
 
-          // Check if 'with Rn' is followed by destructive arithmetic ('sub', 'add', 'cmp')
-          // where the author likely intended non-destructive comparison ('from Rn')
           if (pendingWith != null) {
             checkDestructiveWithPrefix(
                 file,
@@ -492,11 +583,9 @@ public class SfxInvariantAuditor {
                 pendingWith.columnEnd(),
                 lineNum,
                 mnemonic,
-                tokens,
                 violations);
           }
 
-          // Check if 'from Rn' is followed by 'sub #0' or 'add #0' without 'to'
           if (pendingFrom != null
               && pendingTo == null
               && ("sub".equals(mnemonic) || "add".equals(mnemonic))) {
@@ -514,14 +603,15 @@ public class SfxInvariantAuditor {
             }
           }
 
-          // The modal prefixes are consumed by this instruction
           pendingFrom = null;
           pendingTo = null;
           pendingWith = null;
         }
       }
 
-      lastMnemonic = mnemonic;
+      if (!isAltModal) {
+        lastMnemonic = mnemonic;
+      }
     }
 
     // Trailing dangling modal prefix at end of code
@@ -562,15 +652,20 @@ public class SfxInvariantAuditor {
                   pendingWith.line())));
     }
 
-    violations.addAll(new SfxPerformanceAuditor().audit(file));
-
-    boolean valid = violations.stream().noneMatch(v -> v.severity() == Severity.ERROR);
-    String summary =
-        String.format(
-            "SuperFX Invariants Audit: %d violation(s) found (%s).",
-            violations.size(), valid ? "PASSED" : "FAILED");
-
-    return new AuditResult(valid, violations, summary);
+    return violations.stream()
+        .map(
+            v ->
+                new AuditFinding.Hardware(
+                    uri,
+                    v.line(),
+                    v.columnStart(),
+                    v.columnEnd(),
+                    v.rule(),
+                    v.severity() == Severity.ERROR
+                        ? dev.secondsun.retrolsp.diagnostic.DiagnosticSeverity.ERROR
+                        : dev.secondsun.retrolsp.diagnostic.DiagnosticSeverity.WARNING,
+                    v.message()))
+        .toList();
   }
 
   private boolean isBranchOrLoop(String mnemonic) {
@@ -607,9 +702,7 @@ public class SfxInvariantAuditor {
       String mnemonic,
       List<Token> tokens,
       int opcodeIdx,
-      String rawLine,
       List<InvariantViolation> violations) {
-    // Inspect operand tokens after opcode
     for (int i = opcodeIdx + 1; i < tokens.size(); i++) {
       Token tok = tokens.get(i);
 
@@ -635,7 +728,6 @@ public class SfxInvariantAuditor {
 
       String text = tok.text() != null ? tok.text().trim() : "";
       if (!text.isEmpty()) {
-        // Check hex literal ($xxxx or 0x...)
         Matcher hexMatch = HEX_LITERAL.matcher(text);
         if (hexMatch.find()) {
           try {
@@ -695,7 +787,10 @@ public class SfxInvariantAuditor {
   }
 
   private String resolveSymbolSegment(
-      String symbol, TokenizedFile currentFile, Map<String, String> localSegments) {
+      String symbol,
+      TokenizedFile currentFile,
+      WorkspaceSnapshot snapshot,
+      Map<String, String> localSegments) {
     if (symbol == null || symbol.isBlank()) {
       return null;
     }
@@ -704,30 +799,30 @@ public class SfxInvariantAuditor {
     if (local != null) {
       return local;
     }
-    if (projectService != null && projectService.getSymbolService() != null) {
-      var loc =
-          projectService
-              .getSymbolService()
-              .getLocation(symbol, currentFile != null ? currentFile.uri() : null, 0);
-      if (loc != null && loc.filename() != null) {
-        TokenizedFile targetFile = projectService.getFileContents(loc.filename());
-        if (targetFile != null) {
-          String currentSeg = null;
-          int limit = Math.min(loc.line() + 1, targetFile.textLines());
-          for (int i = 0; i < limit; i++) {
-            List<Token> tokens = targetFile.getLineTokens(i);
-            if (tokens != null
-                && tokens.size() >= 2
-                && ".segment".equalsIgnoreCase(tokens.get(0).text())) {
-              String segName =
-                  tokens.get(1).text().replace("\"", "").trim().toUpperCase(Locale.ROOT);
-              if (!segName.isEmpty()) {
-                currentSeg = segName;
-              }
+    WorkspaceSnapshot activeSnap = snapshot != null ? snapshot : workspaceIndex.snapshot();
+    URI callingUri = currentFile != null ? currentFile.uri() : null;
+    var loc = activeSnap.resolveLocation(symbol, callingUri, 0);
+    if (loc != null && loc.filename() != null) {
+      TokenizedFile targetFile = activeSnap.file(loc.filename());
+      if ((targetFile == null || targetFile.isEmpty())
+          && workspaceIndex.isInsideWorkspace(loc.filename())) {
+        targetFile = workspaceIndex.getFileContents(loc.filename());
+      }
+      if (targetFile != null && !targetFile.isEmpty()) {
+        String currentSeg = null;
+        int limit = Math.min(loc.line() + 1, targetFile.textLines());
+        for (int i = 0; i < limit; i++) {
+          List<Token> tokens = targetFile.getLineTokens(i);
+          if (tokens != null
+              && tokens.size() >= 2
+              && ".segment".equalsIgnoreCase(tokens.get(0).text())) {
+            String segName = tokens.get(1).text().replace("\"", "").trim().toUpperCase(Locale.ROOT);
+            if (!segName.isEmpty()) {
+              currentSeg = segName;
             }
           }
-          return currentSeg;
         }
+        return currentSeg;
       }
     }
     return null;
@@ -765,8 +860,6 @@ public class SfxInvariantAuditor {
       int lineNum,
       List<Token> tokens,
       int opcodeIdx,
-      TokenizedFile file,
-      Map<String, String> symbolSegments,
       Map<String, String> regLoadedSymbol,
       List<InvariantViolation> violations) {
     if (opcodeIdx + 1 >= tokens.size()) {
@@ -824,7 +917,6 @@ public class SfxInvariantAuditor {
       return;
     }
 
-    // Extract primary symbol in #<symbol> or #(symbol + offset)
     for (Token t : immTokens) {
       if (t.type == TokenType.TOK_IDENT
           || t.type == TokenType.TOK_LOCAL_IDENT
@@ -848,7 +940,6 @@ public class SfxInvariantAuditor {
       int modalColEnd,
       int targetLineNum,
       String mnemonic,
-      List<Token> targetTokens,
       List<InvariantViolation> violations) {
     if (!"sub".equals(mnemonic) && !"cmp".equals(mnemonic) && !"add".equals(mnemonic)) {
       return;
@@ -856,7 +947,6 @@ public class SfxInvariantAuditor {
     String targetReg = extractModalTarget(file, modalLineNum - 1);
     String regName = targetReg != null ? targetReg.toUpperCase(Locale.ROOT) : "Rn";
 
-    // Scan the next few non-empty lines for conditional branches
     boolean followedByBranch = false;
     int checkLines = Math.min(file.textLines(), targetLineNum + 4);
     for (int l = targetLineNum; l < checkLines; l++) {
@@ -891,10 +981,10 @@ public class SfxInvariantAuditor {
       List<Token> tokens,
       int opcodeIdx,
       TokenizedFile file,
+      WorkspaceSnapshot snapshot,
       Map<String, String> symbolSegments,
       Map<String, String> regLoadedSymbol,
       List<InvariantViolation> violations) {
-    // Find register inside (Rn)
     String addrReg = null;
     for (int i = opcodeIdx + 1; i < tokens.size(); i++) {
       Token t = tokens.get(i);
@@ -910,7 +1000,7 @@ public class SfxInvariantAuditor {
     if (sym == null) {
       return;
     }
-    String seg = resolveSymbolSegment(sym, file, symbolSegments);
+    String seg = resolveSymbolSegment(sym, file, snapshot, symbolSegments);
     if (seg != null && isRomSegment(seg)) {
       int opStart = tokens.get(opcodeIdx).getStartIndex();
       int opEnd = tokens.get(tokens.size() - 1).getEndIndex();

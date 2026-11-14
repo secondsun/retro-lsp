@@ -11,9 +11,7 @@ import dev.secondsun.lsp.ReferenceContext;
 import dev.secondsun.lsp.ReferenceParams;
 import dev.secondsun.lsp.TextDocumentIdentifier;
 import dev.secondsun.retro.util.CA65Scanner;
-import dev.secondsun.retro.util.FileService;
-import dev.secondsun.retro.util.ProjectService;
-import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
 import dev.secondsun.retrolsp.CA65LanguageServer;
 import dev.secondsun.retrolsp.feature.FindReferencesFeature;
 import java.net.URI;
@@ -36,7 +34,7 @@ public class ReferencesTest {
 
   @Test
   public void testFindReferencesWithNullFile() {
-    var projectService = new ProjectService(new FileService(), new SymbolService());
+    var projectService = new DefaultWorkspaceIndex();
     var feature = new FindReferencesFeature(projectService);
     var params = createParams(URI.create("file:///test.s"), 0, 0, false);
 
@@ -47,7 +45,7 @@ public class ReferencesTest {
 
   @Test
   public void testFindReferencesLineOutOfBounds() {
-    var projectService = new ProjectService(new FileService(), new SymbolService());
+    var projectService = new DefaultWorkspaceIndex();
     var feature = new FindReferencesFeature(projectService);
     var fileContent = new CA65Scanner().tokenize("label:\n");
     var params = createParams(URI.create("file:///test.s"), 10, 0, false);
@@ -69,11 +67,11 @@ public class ReferencesTest {
 
   @Test
   public void testFindReferencesForFunctionAcrossFiles() {
-    var projectService = new ProjectService(new FileService(), new SymbolService());
+    var projectService = new DefaultWorkspaceIndex();
     var sqrtUri = URI.create("file:///gsu_sqrt.i");
     var vectorUri = URI.create("file:///gsu_vector.i");
 
-    projectService.updateFileContents(
+    projectService.openOrUpdateBuffer(
         sqrtUri,
         """
         function gsu_sqrt32 dividendhi, dividendlo : root
@@ -82,7 +80,7 @@ public class ReferencesTest {
             return root
         endfunction
         """);
-    projectService.updateFileContents(
+    projectService.openOrUpdateBuffer(
         vectorUri,
         """
         function vector3_length v1 : len
@@ -110,9 +108,9 @@ public class ReferencesTest {
 
   @Test
   public void testFindReferencesLocalLabelsAndScopedParameters() {
-    var projectService = new ProjectService(new FileService(), new SymbolService());
+    var projectService = new DefaultWorkspaceIndex();
     var uri = URI.create("file:///scoped.s");
-    projectService.updateFileContents(
+    projectService.openOrUpdateBuffer(
         uri,
         """
         function func1 param1 : res
@@ -147,9 +145,9 @@ public class ReferencesTest {
 
   @Test
   public void testFindReferencesStructFields() {
-    var projectService = new ProjectService(new FileService(), new SymbolService());
+    var projectService = new DefaultWorkspaceIndex();
     var uri = URI.create("file:///structs.s");
-    projectService.updateFileContents(
+    projectService.openOrUpdateBuffer(
         uri,
         """
         .struct Point

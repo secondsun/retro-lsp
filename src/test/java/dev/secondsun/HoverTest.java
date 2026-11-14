@@ -110,9 +110,8 @@ public class HoverTest {
 
   @Test
   public void testHoverWithNullFileContent() {
-    var fileService = new dev.secondsun.retro.util.FileService();
-    var symbolService = new dev.secondsun.retro.util.SymbolService();
-    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+    var workspaceIndex = new dev.secondsun.retro.util.DefaultWorkspaceIndex();
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(workspaceIndex);
     var params =
         new TextDocumentPositionParams(
             new TextDocumentIdentifier(URI.create("file:///test.s")), new Position(0, 0));
@@ -125,9 +124,8 @@ public class HoverTest {
 
   @Test
   public void testHoverLineOutOfBounds() {
-    var fileService = new dev.secondsun.retro.util.FileService();
-    var symbolService = new dev.secondsun.retro.util.SymbolService();
-    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+    var workspaceIndex = new dev.secondsun.retro.util.DefaultWorkspaceIndex();
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(workspaceIndex);
     var fileContent = new dev.secondsun.retro.util.CA65Scanner().tokenize("nop\n");
     var params =
         new TextDocumentPositionParams(
@@ -141,13 +139,11 @@ public class HoverTest {
 
   @Test
   public void testHoverOnSymbolHandlesRuntimeFailureGracefully() {
-    var fileService = new dev.secondsun.retro.util.FileService();
-    var symbolService = new dev.secondsun.retro.util.SymbolService();
+    var workspaceIndex = new dev.secondsun.retro.util.DefaultWorkspaceIndex();
     var targetUri = URI.create("file:///non_gsu_file.s");
-    symbolService.addDefinition(
-        "myData", new dev.secondsun.retro.util.vo.Location(targetUri, 0, 0, 6));
+    workspaceIndex.openOrUpdateBuffer(targetUri, "myData:\n");
 
-    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(workspaceIndex);
     var fileContent = new dev.secondsun.retro.util.CA65Scanner().tokenize("lda myData\n");
     var params =
         new TextDocumentPositionParams(
@@ -161,7 +157,6 @@ public class HoverTest {
   @Test
   public void testHoverDisplaysDocComments() {
     var uri = URI.create("file:///test.s");
-    var scanner = new dev.secondsun.retro.util.CA65Scanner();
     var src =
         """
         ; Documenting myCoolFunction
@@ -170,13 +165,11 @@ public class HoverTest {
             return result
         endfunction
         """;
-    var fileContent = scanner.tokenize(src);
-    fileContent.uri = uri;
-    var fileService = new dev.secondsun.retro.util.FileService();
-    var symbolService = new dev.secondsun.retro.util.SymbolService();
-    symbolService.extractDefinitions(fileContent);
+    var workspaceIndex = new dev.secondsun.retro.util.DefaultWorkspaceIndex();
+    workspaceIndex.openOrUpdateBuffer(uri, src);
+    var fileContent = workspaceIndex.getFileContents(uri);
 
-    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(workspaceIndex);
 
     // Hover on myCoolFunction at line 2, character 15
     var params =
@@ -197,7 +190,6 @@ public class HoverTest {
   @Test
   public void testHoverOnFunctionDeclarationDisplaysSignature() {
     var uri = URI.create("file:///test.s");
-    var scanner = new dev.secondsun.retro.util.CA65Scanner();
     var src =
         """
         function calculateSum a, b : sum
@@ -205,13 +197,11 @@ public class HoverTest {
         endfunction
         call calculateSum
         """;
-    var fileContent = scanner.tokenize(src);
-    fileContent.uri = uri;
-    var fileService = new dev.secondsun.retro.util.FileService();
-    var symbolService = new dev.secondsun.retro.util.SymbolService();
-    symbolService.extractDefinitions(fileContent);
+    var workspaceIndex = new dev.secondsun.retro.util.DefaultWorkspaceIndex();
+    workspaceIndex.openOrUpdateBuffer(uri, src);
+    var fileContent = workspaceIndex.getFileContents(uri);
 
-    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(workspaceIndex);
 
     // Hover on function name at declaration (line 0, col 12)
     var paramsDecl =
@@ -235,9 +225,49 @@ public class HoverTest {
   }
 
   @Test
+  public void testHoverOnInlineFunctionDeclarationAndKeyword() {
+    var uri = URI.create("file:///inline_test.sgs");
+    var src =
+        """
+        ; Fast linear interpolation
+        inline function lerp a, b : out
+            return out
+        endfunction
+        call lerp
+        """;
+    var workspaceIndex = new dev.secondsun.retro.util.DefaultWorkspaceIndex();
+    workspaceIndex.openOrUpdateBuffer(uri, src);
+    var fileContent = workspaceIndex.getFileContents(uri);
+
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(workspaceIndex);
+
+    // Hover on "inline" keyword at line 1, col 2
+    var pInline =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(1, 2));
+    var rInline = hoverFeature.handle(pInline, fileContent);
+    assertTrue(rInline.isPresent());
+    assertFalse(rInline.get().contents.isEmpty());
+    assertTrue(rInline.get().contents.get(0).value.contains("inline function"));
+
+    // Hover on function name "lerp" at declaration (line 1, col 18)
+    var pDecl =
+        new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(1, 18));
+    var rDecl = hoverFeature.handle(pDecl, fileContent);
+    assertTrue(rDecl.isPresent());
+    assertFalse(rDecl.get().contents.isEmpty());
+    assertTrue(rDecl.get().contents.get(0).value.contains("inline function lerp a, b : out"));
+
+    // Hover on function name "lerp" at call site (line 4, col 7)
+    var pCall = new TextDocumentPositionParams(new TextDocumentIdentifier(uri), new Position(4, 7));
+    var rCall = hoverFeature.handle(pCall, fileContent);
+    assertTrue(rCall.isPresent());
+    assertFalse(rCall.get().contents.isEmpty());
+    assertTrue(rCall.get().contents.get(0).value.contains("inline function lerp a, b : out"));
+  }
+
+  @Test
   public void testHoverOnPseudoMacroKeywords() {
     var uri = URI.create("file:///test.s");
-    var scanner = new dev.secondsun.retro.util.CA65Scanner();
     var src =
         """
         function myFunc
@@ -245,12 +275,11 @@ public class HoverTest {
             return
         endfunction
         """;
-    var fileContent = scanner.tokenize(src);
-    fileContent.uri = uri;
-    var fileService = new dev.secondsun.retro.util.FileService();
-    var symbolService = new dev.secondsun.retro.util.SymbolService();
+    var workspaceIndex = new dev.secondsun.retro.util.DefaultWorkspaceIndex();
+    workspaceIndex.openOrUpdateBuffer(uri, src);
+    var fileContent = workspaceIndex.getFileContents(uri);
 
-    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(fileService, symbolService);
+    var hoverFeature = new dev.secondsun.retrolsp.feature.HoverFeature(workspaceIndex);
 
     // Hover on "function" keyword at line 0, col 2
     var pFunction =

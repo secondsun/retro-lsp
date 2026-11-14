@@ -1,14 +1,13 @@
 package dev.secondsun.retrolsp.diagnostic;
 
 import dev.secondsun.retro.util.diagnostic.SyntaxDiagnostic;
-import java.util.Locale;
 
 /**
- * Diagnostic violation record describing a syntax error, hardware invariant violation, or stack
- * displacement violation.
+ * Diagnostic violation record describing a syntax error, hardware invariant violation, stack
+ * displacement violation, or performance advisory.
  *
  * @param line line number of the diagnostic (1-based)
- * @param column column index of the diagnostic
+ * @param column column index of the diagnostic (1-based)
  * @param length length of the token or span in characters
  * @param rule unique rule identifier or diagnostic code
  * @param category diagnostic categorization
@@ -43,48 +42,33 @@ public record DiagnosticRecord(
   }
 
   /**
-   * Converts a retro-common {@link SyntaxDiagnostic} to a {@link DiagnosticRecord}.
+   * Converts a typed {@link AuditFinding} to a {@link DiagnosticRecord} using the finding's exact
+   * {@link DiagnosticCategory} without rule-name string prefix guessing.
    *
-   * @param sd the syntax diagnostic to convert
+   * @param finding typed audit finding
    * @return converted diagnostic record
    */
+  public static DiagnosticRecord from(AuditFinding finding) {
+    int col = Math.max(1, finding.columnStart() + 1);
+    int len = Math.max(1, finding.columnEnd() - finding.columnStart());
+    return new DiagnosticRecord(
+        finding.line(),
+        col,
+        len,
+        finding.rule(),
+        finding.category(),
+        finding.severity(),
+        finding.message());
+  }
+
+  /**
+   * Converts a {@code retro-common} {@link SyntaxDiagnostic} directly into a syntax {@link
+   * DiagnosticRecord}.
+   *
+   * @param sd core syntax diagnostic
+   * @return converted syntax diagnostic record
+   */
   public static DiagnosticRecord from(SyntaxDiagnostic sd) {
-    DiagnosticCategory cat;
-    String code = sd.code() != null ? sd.code().toUpperCase(Locale.ROOT) : "";
-    if (code.equals("CALL_IN_HOT_LOOP")
-        || code.equals("CACHE_BLOCK_OVERFLOW")
-        || code.equals("REDUNDANT_RPIX_IN_SUBROUTINE")
-        || code.equals("ROMB_IN_HOT_LOOP")) {
-      cat = DiagnosticCategory.PERFORMANCE;
-    } else if (code.startsWith("STACK_")
-        || code.startsWith("RETURN_")
-        || code.contains("DIVERGENT")) {
-      cat = DiagnosticCategory.STACK_INVARIANT;
-    } else if (code.startsWith("UNSETTLED_")
-        || code.startsWith("UNALIGNED_")
-        || code.startsWith("MERGE_")
-        || code.startsWith("MODAL_")
-        || code.startsWith("PIPELINE_")
-        || code.startsWith("WORD_ALIGNMENT")
-        || code.startsWith("NO_HARDWARE_")
-        || code.startsWith("DANGLING_MODAL")
-        || code.startsWith("UNFLUSHED_")
-        || code.startsWith("ROM_SYMBOL_")
-        || code.startsWith("IWT_R15_")) {
-      cat = DiagnosticCategory.HARDWARE_INVARIANT;
-    } else {
-      cat = DiagnosticCategory.SYNTAX;
-    }
-
-    DiagnosticSeverity sev =
-        switch (sd.severity()) {
-          case ERROR -> DiagnosticSeverity.ERROR;
-          case WARNING -> DiagnosticSeverity.WARNING;
-          case INFO, HINT -> DiagnosticSeverity.INFO;
-        };
-
-    int col = Math.max(1, sd.columnStart() + 1);
-    int len = Math.max(1, sd.columnEnd() - sd.columnStart());
-    return new DiagnosticRecord(sd.line(), col, len, sd.code(), cat, sev, sd.message());
+    return from(AuditFinding.Syntax.from(sd));
   }
 }

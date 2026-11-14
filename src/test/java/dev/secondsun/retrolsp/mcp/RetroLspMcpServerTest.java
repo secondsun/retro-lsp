@@ -182,8 +182,8 @@ public class RetroLspMcpServerTest {
   }
 
   @Test
-  public void testSharedPersistenceAcrossToolCalls() throws Exception {
-    String initialCode =
+  public void testTransientSnippetIsolationVsSharedWorkspacePersistence() throws Exception {
+    String persistentLib =
         """
         ; Shared vector normalizer
         function normalizeVector
@@ -191,38 +191,69 @@ public class RetroLspMcpServerTest {
         endfunction
         """;
 
-    // 1. First tool call: updates workspace index for file:///math.s
-    CallToolResult firstResult =
+    // 1. Open/register persistent buffer in WorkspaceIndex
+    server
+        .getWorkspaceIndex()
+        .openOrUpdateBuffer(java.net.URI.create("file:///math.s"), persistentLib);
+
+    // 2. Inline transient snippet sees both its own local symbol AND workspace's normalizeVector
+    String snippet =
+        """
+        ephemeralHelper:
+            call normalizeVector
+            nop
+        """;
+    CallToolResult snippetLocal =
         server.executeTool(
             "sfx_lookup_symbol",
-            Map.of("symbol", "normalizeVector", "code", initialCode, "uri", "file:///math.s"));
-    assertFalse(firstResult.isError());
+            Map.of("symbol", "ephemeralHelper", "code", snippet, "uri", "file:///ephemeral.s"));
+    assertFalse(snippetLocal.isError());
+    assertTrue(
+        objectMapper
+            .readTree(((TextContent) snippetLocal.content().get(0)).text())
+            .get("found")
+            .asBoolean());
 
-    // 2. Second tool call: lookup normalizeVector without providing 'code'
-    CallToolResult secondResult =
+    CallToolResult snippetWorkspace =
+        server.executeTool(
+            "sfx_lookup_symbol",
+            Map.of("symbol", "normalizeVector", "code", snippet, "uri", "file:///ephemeral.s"));
+    assertFalse(snippetWorkspace.isError());
+    JsonNode wsJson =
+        objectMapper.readTree(((TextContent) snippetWorkspace.content().get(0)).text());
+    assertTrue(wsJson.get("found").asBoolean());
+    assertTrue(wsJson.get("documentation").asText().contains("Shared vector normalizer"));
+
+    // 3. Subsequent call WITHOUT inline code sees persistent normalizeVector, NOT ephemeralHelper
+    CallToolResult persistedLookup =
         server.executeTool("sfx_lookup_symbol", Map.of("symbol", "normalizeVector"));
-    assertFalse(secondResult.isError());
+    assertTrue(
+        objectMapper
+            .readTree(((TextContent) persistedLookup.content().get(0)).text())
+            .get("found")
+            .asBoolean());
 
-    TextContent content = (TextContent) secondResult.content().get(0);
-    JsonNode json = objectMapper.readTree(content.text());
-    assertTrue(json.get("found").asBoolean(), "Symbol should persist in shared workspace index");
-    assertEquals("normalizeVector", json.get("symbol").asText());
-    assertTrue(json.get("documentation").asText().contains("Shared vector normalizer"));
+    CallToolResult ephemeralAfter =
+        server.executeTool("sfx_lookup_symbol", Map.of("symbol", "ephemeralHelper"));
+    assertFalse(
+        objectMapper
+            .readTree(((TextContent) ephemeralAfter.content().get(0)).text())
+            .get("found")
+            .asBoolean(),
+        "Inline 'code' snippet must not pollute persistent WorkspaceIndex");
   }
 
   @Test
   public void testFileUpdatesPropagateToSubsequentToolCalls() throws Exception {
+    java.net.URI labelsUri = java.net.URI.create("file:///labels.s");
     String originalCode =
         """
         my_label:
             nop
         """;
+    server.getWorkspaceIndex().openOrUpdateBuffer(labelsUri, originalCode);
 
-    server.executeTool(
-        "sfx_lookup_symbol",
-        Map.of("symbol", "my_label", "code", originalCode, "uri", "file:///labels.s"));
-
-    // Update the file contents with a new docstring and moved line
+    // Update the persistent buffer with a new docstring and moved line
     String updatedCode =
         """
         nop
@@ -231,10 +262,7 @@ public class RetroLspMcpServerTest {
         my_label:
             nop
         """;
-
-    server.executeTool(
-        "sfx_lookup_symbol",
-        Map.of("symbol", "my_label", "code", updatedCode, "uri", "file:///labels.s"));
+    server.getWorkspaceIndex().openOrUpdateBuffer(labelsUri, updatedCode);
 
     // Query without code
     CallToolResult result =
@@ -262,7 +290,7 @@ public class RetroLspMcpServerTest {
         nop
         stop
         """;
-    server.getProjectService().updateFileContents(java.net.URI.create("file:///test.s"), code);
+    server.getWorkspaceIndex().openOrUpdateBuffer(java.net.URI.create("file:///test.s"), code);
 
     // Audit invariants using only uri
     CallToolResult auditResult =
@@ -274,8 +302,8 @@ public class RetroLspMcpServerTest {
     // Macro expand using only uri
     String macroCode = "gsu_stack_push r1";
     server
-        .getProjectService()
-        .updateFileContents(java.net.URI.create("file:///macro.s"), macroCode);
+        .getWorkspaceIndex()
+        .openOrUpdateBuffer(java.net.URI.create("file:///macro.s"), macroCode);
     CallToolResult expandResult =
         server.executeTool("sfx_expand_macro", Map.of("uri", "file:///macro.s"));
     assertFalse(expandResult.isError());
@@ -446,7 +474,7 @@ public class RetroLspMcpServerTest {
     Files.writeString(child2.resolve("c2.s"), "nop\n");
 
     try (WorkspaceFileWatcher watcher =
-        new WorkspaceFileWatcher(server.getProjectService(), null)) {
+        new WorkspaceFileWatcher(server.getWorkspaceIndex(), null)) {
       assertEquals(0, watcher.getRegisteredDirectoryCount());
 
       // 1. Register parent: should register parent, child1, subchild, child2 (4 directories)
@@ -494,7 +522,7 @@ public class RetroLspMcpServerTest {
     Files.createDirectories(buildToolsDir);
 
     try (WorkspaceFileWatcher watcher =
-        new WorkspaceFileWatcher(server.getProjectService(), tempDir)) {
+        new WorkspaceFileWatcher(server.getWorkspaceIndex(), tempDir)) {
       watcher.registerDirectory(tempDir);
 
       Set<Path> registered = watcher.getRegisteredDirectories();
@@ -519,19 +547,23 @@ public class RetroLspMcpServerTest {
 
     try (RetroLspMcpServer liveServer =
         new RetroLspMcpServer(
-            new dev.secondsun.retro.util.ProjectService(
-                new dev.secondsun.retro.util.FileService(),
-                new dev.secondsun.retro.util.SymbolService(),
-                tempDir),
-            null,
-            tempDir)) {
-      // 1. Path-scoped lookup works cleanly
+            new dev.secondsun.retro.util.DefaultWorkspaceIndex(tempDir), null, tempDir)) {
+      // Lazy startup invariant: zero files indexed and zero directories watched before first call
+      assertTrue(liveServer.getWorkspaceIndex().snapshot().effectiveFiles().isEmpty());
+      assertEquals(0, liveServer.getFileWatcher().getRegisteredDirectoryCount());
+
+      // 1. Path-scoped lookup works cleanly and lazily watches ONLY dirA
       CallToolResult resultA =
           liveServer.executeTool("sfx_lookup_symbol", Map.of("symbol", "funcA", "path", "dirA"));
       assertFalse(resultA.isError());
       JsonNode jsonA = objectMapper.readTree(((TextContent) resultA.content().get(0)).text());
       assertTrue(jsonA.get("found").asBoolean());
       assertEquals("funcA", jsonA.get("symbol").asText());
+      assertTrue(
+          liveServer
+              .getFileWatcher()
+              .getRegisteredDirectories()
+              .contains(dirA.toAbsolutePath().normalize()));
 
       // 2. Reject path outside workspace boundary
       CallToolResult outsideResult =

@@ -1,9 +1,9 @@
 package dev.secondsun.retrolsp.mcp.tools;
 
 import dev.secondsun.retro.util.CA65Scanner;
-import dev.secondsun.retro.util.FileService;
-import dev.secondsun.retro.util.ProjectService;
-import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceSnapshot;
 import dev.secondsun.retro.util.vo.TokenizedFile;
 import dev.secondsun.sfxoptimizer.macro.CA65MacroExpander;
 import java.net.URI;
@@ -11,27 +11,26 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Static analysis tool that expands CA65 and X-GSU macros (.macro, .define, function, for, stack
- * operations) into a concrete instruction stream using CA65MacroExpander and a shared FileService.
+ * Static analysis tool that expands CA65 and X-GSU macros ({@code .macro}, {@code .define}, {@code
+ * function}, {@code for}, stack operations) into a concrete instruction stream using {@link
+ * CA65MacroExpander} and an immutable {@link WorkspaceSnapshot}.
  */
 public class SfxMacroExpanderTool {
 
-  private final ProjectService projectService;
-  private final FileService fileService;
+  private final WorkspaceIndex workspaceIndex;
 
-  /** Default constructor initializing with an empty in-memory ProjectService. */
+  /** Default constructor initializing with an empty in-memory {@link DefaultWorkspaceIndex}. */
   public SfxMacroExpanderTool() {
-    this(new ProjectService(new FileService(), new SymbolService()));
+    this(new DefaultWorkspaceIndex());
   }
 
   /**
-   * Constructs tool with the provided project service.
+   * Constructs tool backed by the provided {@link WorkspaceIndex}.
    *
-   * @param projectService project service managing files and symbol lookups
+   * @param workspaceIndex workspace index managing files, macros, and snapshots
    */
-  public SfxMacroExpanderTool(ProjectService projectService) {
-    this.projectService = Objects.requireNonNull(projectService);
-    this.fileService = projectService.getFileService();
+  public SfxMacroExpanderTool(WorkspaceIndex workspaceIndex) {
+    this.workspaceIndex = Objects.requireNonNull(workspaceIndex, "workspaceIndex must not be null");
   }
 
   /**
@@ -55,20 +54,30 @@ public class SfxMacroExpanderTool {
   }
 
   /**
-   * Expands macro directives in assembly code or workspace document URI.
+   * Expands macro directives in inline assembly code (as a transient snippet overlay) or a
+   * workspace document URI without mutating persistent workspace state.
    *
-   * @param code assembly source code or null
-   * @param uriStr workspace document URI or null
+   * @param code assembly source code or {@code null}
+   * @param uriStr workspace document URI or {@code null}
    * @return macro expansion result
    */
   public MacroExpandResult expand(String code, String uriStr) {
-    URI uri = uriStr != null ? URI.create(uriStr) : null;
-    TokenizedFile tokenized = projectService.resolveFile(uri, code);
-
-    if (tokenized == null || tokenized.isEmpty()) {
-      if (uri != null && (code == null || code.isBlank())) {
+    URI uri = uriStr != null && !uriStr.isBlank() ? URI.create(uriStr) : null;
+    WorkspaceSnapshot snapshot = workspaceIndex.snapshotFor(uri, code);
+    TokenizedFile tokenized;
+    if (code != null && !code.isBlank()) {
+      URI lookupUri = uri != null ? uri : WorkspaceSnapshot.TRANSIENT_SNIPPET_URI;
+      tokenized = snapshot.file(lookupUri);
+    } else if (uri != null) {
+      tokenized = workspaceIndex.resolveFile(uri, null);
+      if (tokenized == null || tokenized.isEmpty()) {
         throw new IllegalArgumentException("File not found in workspace: " + uri);
       }
+    } else {
+      return new MacroExpandResult("", 0, 0);
+    }
+
+    if (tokenized == null || tokenized.isEmpty()) {
       return new MacroExpandResult("", 0, 0);
     }
 
@@ -76,7 +85,7 @@ public class SfxMacroExpanderTool {
         (code != null && !code.isBlank()) ? code.split("\r?\n", -1).length : tokenized.textLines();
 
     CA65Scanner scanner = new CA65Scanner();
-    CA65MacroExpander expander = new CA65MacroExpander(fileService, scanner);
+    CA65MacroExpander expander = new CA65MacroExpander(snapshot, scanner);
     TokenizedFile expanded = expander.expand(tokenized);
 
     List<String> rawLines = expanded.getRawLines();

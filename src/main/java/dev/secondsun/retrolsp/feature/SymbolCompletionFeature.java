@@ -8,13 +8,17 @@ import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.lsp.TextEdit;
-import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceSnapshot;
 import dev.secondsun.retro.util.vo.Scope;
 import dev.secondsun.retro.util.vo.TokenizedFile;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -22,17 +26,23 @@ import java.util.Set;
 public class SymbolCompletionFeature implements CompletionFeature {
 
   private static final List<String> PSEUDO_MACROS =
-      List.of("function", "endfunction", "call", "return");
+      List.of("function", "inline", "endfunction", "call", "return");
 
-  private final SymbolService symbolService;
+  private final WorkspaceIndex workspaceIndex;
+
+  /** Constructs a standalone {@code SymbolCompletionFeature} with a default workspace index. */
+  public SymbolCompletionFeature() {
+    this(new DefaultWorkspaceIndex());
+  }
 
   /**
-   * Constructs a new {@code SymbolCompletionFeature} with the specified symbol service.
+   * Constructs a new {@code SymbolCompletionFeature} backed by the specified {@link
+   * WorkspaceIndex}.
    *
-   * @param symbolService the symbol service used to look up visible scopes and definitions
+   * @param workspaceIndex workspace index used to look up visible scopes and symbol definitions
    */
-  public SymbolCompletionFeature(SymbolService symbolService) {
-    this.symbolService = symbolService;
+  public SymbolCompletionFeature(WorkspaceIndex workspaceIndex) {
+    this.workspaceIndex = Objects.requireNonNull(workspaceIndex, "workspaceIndex must not be null");
   }
 
   private static boolean isIdentifierChar(char c) {
@@ -49,6 +59,8 @@ public class SymbolCompletionFeature implements CompletionFeature {
   @Override
   public boolean canComplete(TextDocumentPositionParams params, TokenizedFile fileContent) {
     if (fileContent == null
+        || params == null
+        || params.position == null
         || params.position.line < 0
         || params.position.line >= fileContent.textLines()) {
       return false;
@@ -59,24 +71,16 @@ public class SymbolCompletionFeature implements CompletionFeature {
     var leftOfCursor = line.substring(0, col);
     var trimmedLeft = leftOfCursor.stripLeading();
 
-    // Directives starting with "." are handled by DirectiveCompletionFeature /
-    // IncludeCompletionFeature
     if (trimmedLeft.startsWith(".")) {
       return false;
     }
 
-    // Inside a comment
     if (trimmedLeft.startsWith(";") || leftOfCursor.contains(";")) {
       return false;
     }
 
-    // Inside a string literal
     long quoteCount = leftOfCursor.chars().filter(ch -> ch == '"').count();
-    if (quoteCount % 2 != 0) {
-      return false;
-    }
-
-    return true;
+    return quoteCount % 2 == 0;
   }
 
   @Override
@@ -89,7 +93,6 @@ public class SymbolCompletionFeature implements CompletionFeature {
     var line = fileContent.getLineText(params.position.line);
     int col = Math.max(0, Math.min(params.position.character, line.length()));
 
-    // Find the prefix under/before cursor
     int startCol = col;
     while (startCol > 0 && isIdentifierChar(line.charAt(startCol - 1))) {
       startCol--;
@@ -115,8 +118,9 @@ public class SymbolCompletionFeature implements CompletionFeature {
 
     // 1. Suggest pseudo-macro keywords at statement position
     if (isAtStatementPosition) {
+      String lowerPrefix = prefix.toLowerCase(Locale.ROOT);
       for (String keyword : PSEUDO_MACROS) {
-        if (prefix.isEmpty() || keyword.toLowerCase().startsWith(prefix.toLowerCase())) {
+        if (prefix.isEmpty() || keyword.toLowerCase(Locale.ROOT).startsWith(lowerPrefix)) {
           seen.add(keyword);
           var item = new CompletionItem();
           item.label = keyword;
@@ -128,41 +132,32 @@ public class SymbolCompletionFeature implements CompletionFeature {
       }
     }
 
-    // 2. Suggest symbols visible in lexical scope and global scope
+    // 2. Suggest symbols visible in lexical scope and across the immutable workspace snapshot
     URI uri = params.textDocument != null ? params.textDocument.uri : null;
     int lineNum = params.position.line;
 
-    if (symbolService != null) {
-      // Local and enclosing scopes
-      if (uri != null) {
-        Optional<Scope> scopeOpt = symbolService.getScopeAt(uri, lineNum);
-        if (scopeOpt.isPresent()) {
-          Scope curr = scopeOpt.get();
-          while (curr != null) {
-            if (curr.definitions() != null) {
-              for (String name : curr.definitions().keySet()) {
-                addSymbolItem(name, prefix, replaceRange, items, seen);
-              }
+    WorkspaceSnapshot snapshot = workspaceIndex.snapshot();
+    if (uri != null && snapshot.file(uri).isEmpty() && !fileContent.isEmpty()) {
+      snapshot = snapshot.overlay(uri, String.join("\n", fileContent.getRawLines()));
+    }
+
+    if (uri != null) {
+      Optional<Scope> scopeOpt = snapshot.getScopeAt(uri, lineNum);
+      if (scopeOpt.isPresent()) {
+        Scope curr = scopeOpt.get();
+        while (curr != null) {
+          if (curr.definitions() != null) {
+            for (String name : curr.definitions().keySet()) {
+              addSymbolItem(name, prefix, replaceRange, items, seen);
             }
-            curr = curr.parent();
           }
+          curr = curr.parent();
         }
       }
+    }
 
-      // Global scope
-      Scope global = symbolService.getGlobalScope();
-      if (global != null && global.definitions() != null) {
-        for (String name : global.definitions().keySet()) {
-          addSymbolItem(name, prefix, replaceRange, items, seen);
-        }
-      }
-
-      // SymbolService flat definitions fallback
-      if (symbolService.definitions != null) {
-        for (String name : symbolService.definitions.keySet()) {
-          addSymbolItem(name, prefix, replaceRange, items, seen);
-        }
-      }
+    for (String name : snapshot.allSymbolNames()) {
+      addSymbolItem(name, prefix, replaceRange, items, seen);
     }
 
     if (items.isEmpty()) {
@@ -186,7 +181,8 @@ public class SymbolCompletionFeature implements CompletionFeature {
     if (!seen.add(name)) {
       return;
     }
-    if (!prefix.isEmpty() && !name.toLowerCase().startsWith(prefix.toLowerCase())) {
+    if (!prefix.isEmpty()
+        && !name.toLowerCase(Locale.ROOT).startsWith(prefix.toLowerCase(Locale.ROOT))) {
       return;
     }
 

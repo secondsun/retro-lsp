@@ -5,7 +5,8 @@ import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
 
-import dev.secondsun.retro.util.ProjectService;
+import dev.secondsun.retro.util.DiskEventKind;
+import dev.secondsun.retro.util.WorkspaceIndex;
 import java.io.IOException;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileSystems;
@@ -26,9 +27,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Background filesystem watcher that monitors workspace directories recursively for SuperFX and
- * CA65 source file changes, synchronizing updates and deletions into the shared {@link
- * ProjectService}.
+ * Background filesystem watcher that monitors indexed workspace directories lazily on demand for
+ * SuperFX and CA65 source file changes, synchronizing creations, modifications, and deletions into
+ * the shared {@link WorkspaceIndex}.
  */
 public class WorkspaceFileWatcher implements AutoCloseable {
 
@@ -37,38 +38,49 @@ public class WorkspaceFileWatcher implements AutoCloseable {
   private final WatchService watchService;
   private final Map<WatchKey, Path> watchKeys = new ConcurrentHashMap<>();
   private final Set<Path> registeredDirs = ConcurrentHashMap.newKeySet();
-  private final ProjectService projectService;
+  private final WorkspaceIndex workspaceIndex;
   private final Thread watcherThread;
   private volatile boolean running = true;
 
   /**
-   * Constructs and starts a virtual-thread filesystem watcher over the workspace root.
+   * Constructs and starts a virtual-thread filesystem watcher without eagerly walking the directory
+   * tree (honoring ADR-0002 lazy on-demand indexing). Directories are registered lazily via {@link
+   * #watchDirectory(Path)} as {@link WorkspaceIndex} indexes them.
    *
-   * @param projectService project service to notify when files change
-   * @param rootPath canonical root directory to watch recursively
-   * @throws IOException if WatchService creation or directory registration fails
+   * @param workspaceIndex workspace index to notify when disk files change
+   * @param rootPath optional workspace root path
+   * @throws IOException if {@link WatchService} creation fails
    */
-  public WorkspaceFileWatcher(ProjectService projectService, Path rootPath) throws IOException {
-    this.projectService = Objects.requireNonNull(projectService);
+  public WorkspaceFileWatcher(WorkspaceIndex workspaceIndex, Path rootPath) throws IOException {
+    this.workspaceIndex = Objects.requireNonNull(workspaceIndex, "workspaceIndex must not be null");
     this.watchService = FileSystems.getDefault().newWatchService();
-
-    this.watcherThread =
-        Thread.ofVirtual()
-            .name("mcp-file-watcher")
-            .start(
-                () -> {
-                  if (rootPath != null && Files.exists(rootPath)) {
-                    registerDirectory(rootPath);
-                  }
-                  runLoop();
-                });
+    this.watcherThread = Thread.ofVirtual().name("mcp-file-watcher").start(this::runLoop);
   }
 
   /**
-   * Recursively walks and registers the directory hierarchy with the watch service, excluding
-   * hidden, build, and dependency directories.
+   * Registers a single directory with the watch service idempotently without walking its subtree.
+   * Wired to {@link WorkspaceIndex#setDirectoryIndexedListener}.
    *
-   * @param startPath the directory to start walking
+   * @param dir directory to watch
+   */
+  public synchronized void watchDirectory(Path dir) {
+    if (!running || dir == null || !Files.isDirectory(dir)) {
+      return;
+    }
+    try {
+      registerSingle(dir);
+    } catch (ClosedWatchServiceException e) {
+      // Watcher closed concurrently.
+    } catch (IOException e) {
+      LOG.log(Level.WARNING, "Failed to watch directory: " + dir, e);
+    }
+  }
+
+  /**
+   * Recursively walks and registers the directory hierarchy starting at {@code startPath},
+   * excluding hidden, build, and tool directories.
+   *
+   * @param startPath directory tree root to register
    */
   public synchronized void registerDirectory(Path startPath) {
     if (!running || startPath == null || !Files.isDirectory(startPath)) {
@@ -90,15 +102,7 @@ public class WorkspaceFileWatcher implements AutoCloseable {
               }
               Path normalized = dir.toAbsolutePath().normalize();
               String name = dir.getFileName() != null ? dir.getFileName().toString() : "";
-              if (!normalized.equals(rootNormalized)
-                  && (name.startsWith(".")
-                      || "node_modules".equals(name)
-                      || "target".equals(name)
-                      || "build".equals(name)
-                      || "dist".equals(name)
-                      || "out".equals(name)
-                      || "tools".equals(name)
-                      || "build_tools".equals(name))) {
+              if (!normalized.equals(rootNormalized) && isIgnoredDirectoryName(name)) {
                 return FileVisitResult.SKIP_SUBTREE;
               }
               if (registeredDirs.contains(normalized)) {
@@ -113,6 +117,17 @@ public class WorkspaceFileWatcher implements AutoCloseable {
     } catch (IOException e) {
       LOG.log(Level.WARNING, "Failed to register directory tree: " + startPath, e);
     }
+  }
+
+  private static boolean isIgnoredDirectoryName(String name) {
+    return name.startsWith(".")
+        || "node_modules".equals(name)
+        || "target".equals(name)
+        || "build".equals(name)
+        || "dist".equals(name)
+        || "out".equals(name)
+        || "tools".equals(name)
+        || "build_tools".equals(name);
   }
 
   private void registerSingle(Path dir) throws IOException {
@@ -164,17 +179,21 @@ public class WorkspaceFileWatcher implements AutoCloseable {
 
         if (kind == ENTRY_CREATE) {
           if (Files.isDirectory(child)) {
-            registerDirectory(child);
+            String dirName = child.getFileName() != null ? child.getFileName().toString() : "";
+            if (!isIgnoredDirectoryName(dirName)
+                && workspaceIndex.isInsideWorkspace(child.toUri())) {
+              workspaceIndex.includeDir(child.toUri());
+            }
           } else if (isSourceFile(child)) {
-            projectService.refreshFileContents(child.toUri());
+            workspaceIndex.notifyDiskEvent(child.toUri(), DiskEventKind.CREATED);
           }
         } else if (kind == ENTRY_MODIFY) {
           if (isSourceFile(child)) {
-            projectService.refreshFileContents(child.toUri());
+            workspaceIndex.notifyDiskEvent(child.toUri(), DiskEventKind.MODIFIED);
           }
         } else if (kind == ENTRY_DELETE) {
           if (isSourceFile(child)) {
-            projectService.removeFile(child.toUri());
+            workspaceIndex.notifyDiskEvent(child.toUri(), DiskEventKind.DELETED);
           }
         }
       }

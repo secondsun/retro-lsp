@@ -1,10 +1,9 @@
 package dev.secondsun.retrolsp.mcp.tools;
 
-import dev.secondsun.retro.util.FileService;
-import dev.secondsun.retro.util.ProjectService;
-import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceSnapshot;
 import dev.secondsun.retro.util.vo.Location;
-import dev.secondsun.retro.util.vo.TokenizedFile;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -14,26 +13,24 @@ import java.util.Objects;
 
 /**
  * Static analysis tool that resolves symbol definitions, scopes, and documentation in CA65/X-GSU
- * assembly using a shared SymbolService and ProjectService.
+ * assembly using immutable {@link WorkspaceSnapshot}s from a {@link WorkspaceIndex}.
  */
 public class SfxSymbolLookupTool {
 
-  private final ProjectService projectService;
-  private final SymbolService symbolService;
+  private final WorkspaceIndex workspaceIndex;
 
-  /** Default constructor initializing with an empty in-memory ProjectService. */
+  /** Default constructor initializing with an empty in-memory {@link DefaultWorkspaceIndex}. */
   public SfxSymbolLookupTool() {
-    this(new ProjectService(new FileService(), new SymbolService()));
+    this(new DefaultWorkspaceIndex());
   }
 
   /**
-   * Constructs tool with the provided project service.
+   * Constructs tool backed by the provided {@link WorkspaceIndex}.
    *
-   * @param projectService project service for resolving files and symbols
+   * @param workspaceIndex workspace index for resolving files, snapshots, and symbols
    */
-  public SfxSymbolLookupTool(ProjectService projectService) {
-    this.projectService = Objects.requireNonNull(projectService);
-    this.symbolService = projectService.getSymbolService();
+  public SfxSymbolLookupTool(WorkspaceIndex workspaceIndex) {
+    this.workspaceIndex = Objects.requireNonNull(workspaceIndex, "workspaceIndex must not be null");
   }
 
   /** Default cap on the number of entries returned in {@code allLocations}. */
@@ -83,9 +80,9 @@ public class SfxSymbolLookupTool {
    * Resolves a symbol with default path filter and result limit.
    *
    * @param symbol name of the symbol to lookup
-   * @param code optional assembly source code
+   * @param code optional inline assembly source code (evaluated as a transient snippet)
    * @param uriStr optional document URI string
-   * @param line optional 1-based line number for contextual resolution
+   * @param line optional line number for contextual resolution
    * @return symbol lookup result
    */
   public SymbolLookupResult lookup(String symbol, String code, String uriStr, Integer line) {
@@ -93,12 +90,13 @@ public class SfxSymbolLookupTool {
   }
 
   /**
-   * Resolves a symbol definition and documentation.
+   * Resolves a symbol definition and documentation without mutating workspace state when inline
+   * {@code code} is supplied.
    *
    * @param symbol name of the symbol to lookup
-   * @param code optional assembly source code
+   * @param code optional inline assembly source code (evaluated as a transient snippet)
    * @param uriStr optional document URI string
-   * @param line optional 1-based line number for contextual resolution
+   * @param line optional line number for contextual resolution
    * @param pathFilter optional workspace-relative folder/file prefix; only locations under it are
    *     returned
    * @param maxResults optional cap on {@code allLocations} (default {@link #DEFAULT_MAX_RESULTS})
@@ -115,23 +113,24 @@ public class SfxSymbolLookupTool {
       return new SymbolLookupResult("", false, null, null, null, List.of(), 0);
     }
 
-    URI uri = uriStr != null ? URI.create(uriStr) : null;
-    TokenizedFile file = projectService.resolveFile(uri, code);
-    if (file != null && file.uri != null) {
-      uri = file.uri;
-    }
+    URI uri = uriStr != null && !uriStr.isBlank() ? URI.create(uriStr) : null;
+    WorkspaceSnapshot snapshot = workspaceIndex.snapshotFor(uri, code);
+    URI lookupUri =
+        (uri == null && code != null && !code.isBlank())
+            ? WorkspaceSnapshot.TRANSIENT_SNIPPET_URI
+            : uri;
 
-    Location loc = projectService.resolveLocation(symbol, uri, line);
-    String doc = projectService.resolveDocumentation(symbol, uri, line);
+    Location loc = snapshot.resolveLocation(symbol, lookupUri, line);
+    String doc = snapshot.resolveDocumentation(symbol, lookupUri, line);
     String scopeName = null;
-    if (line != null && uri != null) {
-      var scopeOpt = projectService.getScopeAt(uri, line);
+    if (line != null && lookupUri != null) {
+      var scopeOpt = snapshot.getScopeAt(lookupUri, line);
       if (scopeOpt.isPresent()) {
         scopeName = scopeOpt.get().name();
       }
     }
 
-    List<Location> rawLocations = projectService.resolveLocations(symbol, uri, line);
+    List<Location> rawLocations = snapshot.resolveLocations(symbol, lookupUri, line);
     List<SymbolLocation> ordered = new ArrayList<>();
     if (rawLocations != null) {
       for (Location l : rawLocations) {
@@ -141,7 +140,6 @@ public class SfxSymbolLookupTool {
         }
       }
     }
-    // Stable sort: real sources first, fixture copies/generated output last.
     ordered.sort(Comparator.comparingInt(sl -> isLowPriority(sl.uri()) ? 1 : 0));
 
     if (pathFilter != null && !pathFilter.isBlank()) {
@@ -149,11 +147,9 @@ public class SfxSymbolLookupTool {
       ordered.removeIf(sl -> sl.path() == null || !sl.path().startsWith(prefix));
     }
 
-    // Primary location: first ranked entry; fall back to the raw resolution.
     SymbolLocation primary = ordered.isEmpty() ? toSymbolLocation(loc) : ordered.get(0);
     if (!ordered.isEmpty() && loc != null) {
       SymbolLocation raw = toSymbolLocation(loc);
-      // Prefer the index's scoped resolution when it is a real source.
       if (raw != null && !isLowPriority(raw.uri()) && ordered.contains(raw)) {
         primary = raw;
       }
@@ -192,7 +188,7 @@ public class SfxSymbolLookupTool {
         if ("file".equalsIgnoreCase(u.getScheme()) && u.getPath() != null) {
           Path abs = Path.of(u).toAbsolutePath().normalize();
           uriStr = abs.toUri().toString();
-          Path root = projectService.getWorkspaceRoot();
+          Path root = workspaceIndex.getWorkspaceRoot();
           path =
               root != null && abs.startsWith(root)
                   ? root.relativize(abs).toString()

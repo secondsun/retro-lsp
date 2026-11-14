@@ -1,15 +1,30 @@
 package dev.secondsun.retrolsp.mcp.tools;
 
-import dev.secondsun.sfxoptimizer.viewer.CodeAnalyzer;
-import dev.secondsun.sfxoptimizer.viewer.CodeBlockDto;
-import dev.secondsun.sfxoptimizer.viewer.FileAnalysisResultDto;
-import dev.secondsun.sfxoptimizer.viewer.FunctionScopeDto;
-import dev.secondsun.sfxoptimizer.viewer.IntervalSpanDto;
-import java.util.*;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceSnapshot;
+import dev.secondsun.retro.util.vo.TokenizedFile;
+import dev.secondsun.sfxoptimizer.Constants;
+import dev.secondsun.sfxoptimizer.Interval;
+import dev.secondsun.sfxoptimizer.IntervalKey;
+import dev.secondsun.sfxoptimizer.analysis.CfgBlock;
+import dev.secondsun.sfxoptimizer.analysis.FunctionAnalysis;
+import dev.secondsun.sfxoptimizer.analysis.MainAnalysis;
+import dev.secondsun.sfxoptimizer.analysis.ProgramAnalysisResult;
+import dev.secondsun.sfxoptimizer.analysis.SfxProgramAnalyzer;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Static analysis tool that builds SuperFX Control Flow Graphs (CFG), live-range intervals, and
- * computes register pressure and allocations using sfx-optimizer.
+ * computes register pressure and allocations using {@link SfxProgramAnalyzer}.
  */
 public class SfxRegisterAnalysisTool {
 
@@ -68,7 +83,7 @@ public class SfxRegisterAnalysisTool {
    *
    * @param maxRegisterPressure peak register pressure across all program points
    * @param availableRegisters total physical registers available (16)
-   * @param pressureStatus pressure classification status (OPTIMAL, HIGH, CRITICAL)
+   * @param pressureStatus pressure classification status (OPTIMAL, HIGH, SPILL_RISK)
    * @param intervals list of live-range intervals
    * @param allocations map of variable names to assigned physical registers
    * @param blocks list of CFG basic blocks
@@ -83,23 +98,20 @@ public class SfxRegisterAnalysisTool {
       List<BlockInfo> blocks,
       List<FunctionInfo> functions) {}
 
-  private final dev.secondsun.retro.util.ProjectService projectService;
+  private final WorkspaceIndex workspaceIndex;
 
-  /** Default constructor initializing with an empty in-memory ProjectService. */
+  /** Default constructor initializing with an empty in-memory {@link DefaultWorkspaceIndex}. */
   public SfxRegisterAnalysisTool() {
-    this(
-        new dev.secondsun.retro.util.ProjectService(
-            new dev.secondsun.retro.util.FileService(),
-            new dev.secondsun.retro.util.SymbolService()));
+    this(new DefaultWorkspaceIndex());
   }
 
   /**
-   * Constructs tool with the provided project service.
+   * Constructs tool with the provided workspace index.
    *
-   * @param projectService project service for resolving files and symbols
+   * @param workspaceIndex workspace index for resolving files and cross-file call signatures
    */
-  public SfxRegisterAnalysisTool(dev.secondsun.retro.util.ProjectService projectService) {
-    this.projectService = Objects.requireNonNull(projectService);
+  public SfxRegisterAnalysisTool(WorkspaceIndex workspaceIndex) {
+    this.workspaceIndex = Objects.requireNonNull(workspaceIndex, "workspaceIndex");
   }
 
   /**
@@ -122,100 +134,195 @@ public class SfxRegisterAnalysisTool {
    * @return register analysis result
    */
   public RegisterAnalysisResult analyze(String code, String uriStr, String functionFilter) {
-    java.net.URI uri = uriStr != null ? java.net.URI.create(uriStr) : null;
-    dev.secondsun.retro.util.vo.TokenizedFile tf = projectService.resolveFile(uri, code);
+    URI uri = (uriStr != null && !uriStr.isBlank()) ? URI.create(uriStr) : null;
+    boolean hasInlineCode = code != null && !code.isBlank();
+
+    if (!hasInlineCode && uri == null) {
+      return emptyResult();
+    }
+
+    WorkspaceSnapshot snapshot;
+    TokenizedFile tf;
+    if (hasInlineCode) {
+      snapshot = workspaceIndex.snapshotFor(uri, code);
+      URI targetUri = uri != null ? uri : WorkspaceSnapshot.TRANSIENT_SNIPPET_URI;
+      tf = snapshot.file(targetUri);
+    } else {
+      tf = workspaceIndex.resolveFile(uri, null);
+      snapshot = workspaceIndex.snapshot();
+    }
 
     if (tf == null || tf.isEmpty()) {
-      if (uri != null && (code == null || code.isBlank())) {
+      if (uri != null && !hasInlineCode) {
         throw new IllegalArgumentException("File not found in workspace: " + uri);
       }
-      return new RegisterAnalysisResult(
-          0, TOTAL_SUPERFX_REGISTERS, "OPTIMAL", List.of(), Map.of(), List.of(), List.of());
+      return emptyResult();
     }
 
-    List<String> rawLines = tf.getRawLines();
-    String sourceCode =
-        (rawLines != null && !rawLines.isEmpty()) ? String.join("\n", rawLines) : "";
+    ProgramAnalysisResult analysis = SfxProgramAnalyzer.analyze(tf, snapshot);
+    String filter =
+        (functionFilter != null && !functionFilter.isBlank()) ? functionFilter.trim() : null;
 
-    String fileName = uri != null ? (new java.io.File(uri.getPath()).getName()) : "source.sgs";
-    CodeAnalyzer analyzer = new CodeAnalyzer();
-    FileAnalysisResultDto dto = analyzer.analyze(sourceCode, fileName);
-
-    List<IntervalSpanDto> sourceIntervals = dto.getIntervals();
-    if (functionFilter != null && !functionFilter.isBlank()) {
-      sourceIntervals =
-          sourceIntervals.stream()
-              .filter(i -> functionFilter.equalsIgnoreCase(i.getFunctionScope()))
-              .toList();
-    }
-
+    List<FunctionInfo> functions = new ArrayList<>();
     List<IntervalInfo> intervals = new ArrayList<>();
-    int maxPressure = 0;
-    int totalLines = dto.getTotalLines();
+    Map<String, String> allocations = new LinkedHashMap<>();
 
-    for (IntervalSpanDto span : sourceIntervals) {
-      intervals.add(
-          new IntervalInfo(
-              span.getKeyName(),
-              span.getFunctionScope(),
-              span.isRegister(),
-              span.getRegisterName(),
-              span.getStartLine(),
-              span.getEndLine(),
-              span.getAllocatedRegister(),
-              span.isSpill(),
-              span.getInterferences() != null ? span.getInterferences() : List.of()));
+    MainAnalysis main = analysis.getMain();
+    if (main != null && (filter == null || "(main)".equalsIgnoreCase(filter))) {
+      Map<String, String> mainAlloc = formatAllocatedMap(main.getAllocatedMap());
+      functions.add(
+          new FunctionInfo("(main)", main.getStartLine() + 1, main.getEndLine() + 1, mainAlloc));
+      allocations.putAll(mainAlloc);
+      intervals.addAll(
+          buildScopeIntervals("(main)", main.getIntervals(), mainAlloc, main.getInterferences()));
     }
 
-    // Calculate maximum register pressure across lines
-    for (int line = 0; line <= totalLines; line++) {
-      final int currentLine = line;
-      long count =
-          intervals.stream()
-              .filter(i -> i.startLine() <= currentLine && i.endLine() >= currentLine)
-              .count();
-      if (count > maxPressure) {
-        maxPressure = (int) count;
+    List<FunctionAnalysis> sortedFns =
+        analysis.getFunctions().stream()
+            .sorted(Comparator.comparingInt(FunctionAnalysis::getStartLine))
+            .toList();
+    for (FunctionAnalysis fn : sortedFns) {
+      if (filter != null && !filter.equalsIgnoreCase(fn.getName())) {
+        continue;
       }
-    }
-
-    String status;
-    if (maxPressure <= 8) {
-      status = "OPTIMAL";
-    } else if (maxPressure <= 14) {
-      status = "HIGH";
-    } else {
-      status = "SPILL_RISK";
+      Map<String, String> fnAlloc = formatAllocatedMap(fn.getAllocatedMap());
+      functions.add(
+          new FunctionInfo(fn.getName(), fn.getStartLine() + 1, fn.getEndLine() + 1, fnAlloc));
+      allocations.putAll(fnAlloc);
+      intervals.addAll(
+          buildScopeIntervals(fn.getName(), fn.getIntervals(), fnAlloc, fn.getInterferences()));
     }
 
     List<BlockInfo> blocks = new ArrayList<>();
-    for (CodeBlockDto b : dto.getBlocks()) {
-      blocks.add(
-          new BlockInfo(
-              b.getId(),
-              b.getStartLine(),
-              b.getEndLine(),
-              b.getEntrances() != null ? b.getEntrances() : List.of(),
-              b.getExits() != null ? b.getExits() : List.of()));
-    }
-
-    List<FunctionInfo> functions = new ArrayList<>();
-    for (FunctionScopeDto f : dto.getFunctions()) {
-      if (functionFilter != null && !functionFilter.equalsIgnoreCase(f.getName())) {
+    for (CfgBlock block : analysis.getBlocks()) {
+      if (filter != null && !filter.equalsIgnoreCase(block.getScopeName())) {
         continue;
       }
-      functions.add(
-          new FunctionInfo(
-              f.getName(),
-              f.getStartLine(),
-              f.getEndLine(),
-              f.getAllocatedMap() != null ? f.getAllocatedMap() : Map.of()));
+      blocks.add(
+          new BlockInfo(
+              block.getId(),
+              block.getStartLine() + 1,
+              block.getEndLine() + 1,
+              block.getEntrances() != null ? List.copyOf(block.getEntrances()) : List.of(),
+              block.getExits() != null ? List.copyOf(block.getExits()) : List.of()));
     }
 
-    Map<String, String> allocations =
-        dto.getAllocatedMap() != null ? dto.getAllocatedMap() : Map.of();
+    int maxPressure = computeMaxPressure(intervals, analysis.getTotalLines());
+    String status = classifyPressure(maxPressure);
 
     return new RegisterAnalysisResult(
-        maxPressure, TOTAL_SUPERFX_REGISTERS, status, intervals, allocations, blocks, functions);
+        maxPressure,
+        TOTAL_SUPERFX_REGISTERS,
+        status,
+        List.copyOf(intervals),
+        Map.copyOf(allocations),
+        List.copyOf(blocks),
+        List.copyOf(functions));
+  }
+
+  private static RegisterAnalysisResult emptyResult() {
+    return new RegisterAnalysisResult(
+        0, TOTAL_SUPERFX_REGISTERS, "OPTIMAL", List.of(), Map.of(), List.of(), List.of());
+  }
+
+  private static Map<String, String> formatAllocatedMap(Map<String, Constants.Register> raw) {
+    if (raw == null || raw.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, String> result = new LinkedHashMap<>();
+    for (Map.Entry<String, Constants.Register> entry : raw.entrySet()) {
+      if (entry.getKey() != null && entry.getValue() != null) {
+        result.put(entry.getKey(), entry.getValue().name());
+      }
+    }
+    return Map.copyOf(result);
+  }
+
+  private static List<IntervalInfo> buildScopeIntervals(
+      String scopeName,
+      Map<IntervalKey, Interval> rawIntervals,
+      Map<String, String> allocatedMap,
+      Map<IntervalKey, Set<IntervalKey>> interferences) {
+    if (rawIntervals == null || rawIntervals.isEmpty()) {
+      return List.of();
+    }
+    List<IntervalInfo> list = new ArrayList<>();
+    for (Interval interval : rawIntervals.values()) {
+      if (interval == null || !interval.used() || interval.getEnd() < interval.getStart()) {
+        continue;
+      }
+      IntervalKey key = interval.getKey();
+      String keyName = keyToString(key);
+      boolean isRegister = key instanceof IntervalKey.RegisterKey;
+      String registerName =
+          isRegister ? ((IntervalKey.RegisterKey) key).getRegister().name() : null;
+      String allocatedRegister =
+          isRegister
+              ? registerName
+              : allocatedMap.getOrDefault(
+                  keyName.toLowerCase(Locale.ROOT), allocatedMap.get(keyName));
+      boolean isSpill = "SPILL".equals(allocatedRegister);
+
+      Set<IntervalKey> conflictKeys =
+          interferences != null ? interferences.getOrDefault(key, Set.of()) : Set.of();
+      List<String> conflictNames =
+          conflictKeys.stream().map(SfxRegisterAnalysisTool::keyToString).sorted().toList();
+
+      list.add(
+          new IntervalInfo(
+              keyName,
+              scopeName,
+              isRegister,
+              registerName,
+              interval.getStart() + 1,
+              interval.getEnd() + 1,
+              allocatedRegister,
+              isSpill,
+              conflictNames));
+    }
+    list.sort(
+        Comparator.comparing((IntervalInfo i) -> !i.isRegister())
+            .thenComparingInt(IntervalInfo::startLine)
+            .thenComparing(IntervalInfo::key));
+    return list;
+  }
+
+  private static String keyToString(IntervalKey key) {
+    if (key instanceof IntervalKey.RegisterKey rk) {
+      return rk.getRegister().name();
+    }
+    if (key instanceof IntervalKey.LabelKey lk) {
+      return lk.getLabel();
+    }
+    return key.toString();
+  }
+
+  private static int computeMaxPressure(List<IntervalInfo> intervals, int totalLines) {
+    if (intervals.isEmpty() || totalLines <= 0) {
+      return 0;
+    }
+    int maxPressure = 0;
+    for (int line = 1; line <= totalLines; line++) {
+      int count = 0;
+      for (IntervalInfo interval : intervals) {
+        if (interval.startLine() <= line && interval.endLine() >= line) {
+          count++;
+        }
+      }
+      if (count > maxPressure) {
+        maxPressure = count;
+      }
+    }
+    return maxPressure;
+  }
+
+  private static String classifyPressure(int maxPressure) {
+    if (maxPressure <= 8) {
+      return "OPTIMAL";
+    }
+    if (maxPressure <= 14) {
+      return "HIGH";
+    }
+    return "SPILL_RISK";
   }
 }

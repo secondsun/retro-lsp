@@ -9,9 +9,8 @@ import dev.secondsun.lsp.LanguageClient;
 import dev.secondsun.lsp.PublishDiagnosticsParams;
 import dev.secondsun.lsp.ShowMessageParams;
 import dev.secondsun.lsp.ShowMessageRequestParams;
-import dev.secondsun.retro.util.FileService;
-import dev.secondsun.retro.util.ProjectService;
-import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceIndex;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +19,7 @@ import org.junit.jupiter.api.Test;
 
 public class DiagnosticCoordinatorTest {
 
-  private ProjectService projectService;
+  private WorkspaceIndex projectService;
   private TestLanguageClient client;
   private DiagnosticCoordinator coordinator;
 
@@ -49,7 +48,7 @@ public class DiagnosticCoordinatorTest {
 
   @BeforeEach
   public void setUp() {
-    projectService = new ProjectService(new FileService(), new SymbolService());
+    projectService = new DefaultWorkspaceIndex();
     client = new TestLanguageClient();
     coordinator = new DiagnosticCoordinator(projectService, client);
   }
@@ -176,7 +175,7 @@ public class DiagnosticCoordinatorTest {
         function unclosed
             nop r1
         """;
-    projectService.updateFileContents(uri, code);
+    projectService.openOrUpdateBuffer(uri, code);
     coordinator.publishDiagnostics(uri);
 
     assertEquals(1, client.published.size());
@@ -358,5 +357,117 @@ public class DiagnosticCoordinatorTest {
               .toList();
       assertTrue(errors.isEmpty(), "Expected 0 errors in Test.s, found: " + errors);
     }
+  }
+
+  @Test
+  public void testTypedAuditFindingCategoriesForPreviouslyMisclassifiedRules() {
+    String code =
+        """
+        function bad_return a
+            for 4
+                cache
+            endfor
+            ibt r0, #-1
+            with r8
+            sub #1
+            beq @done
+            nop
+        @done:
+            from r12
+            sub #0
+            return a, a
+        endfunction
+        """;
+    DiagnosticResult result = coordinator.auditResult(code, "file:///typed_categories.sgs");
+
+    var cacheInLoop =
+        result.violations().stream()
+            .filter(v -> "CACHE_IN_LOOP".equals(v.rule()))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(DiagnosticCategory.PERFORMANCE, cacheInLoop.category());
+
+    var ibtNeg =
+        result.violations().stream()
+            .filter(v -> "IBT_NEGATIVE_IMMEDIATE".equals(v.rule()))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(DiagnosticCategory.HARDWARE_INVARIANT, ibtNeg.category());
+
+    var destructiveWith =
+        result.violations().stream()
+            .filter(v -> "DESTRUCTIVE_WITH_COMPARISON".equals(v.rule()))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(DiagnosticCategory.HARDWARE_INVARIANT, destructiveWith.category());
+
+    var destructiveFromR0 =
+        result.violations().stream()
+            .filter(v -> "DESTRUCTIVE_FROM_ALU_TO_R0".equals(v.rule()))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(DiagnosticCategory.HARDWARE_INVARIANT, destructiveFromR0.category());
+
+    var returnErr =
+        result.violations().stream()
+            .filter(v -> "RETURN_STATEMENT_ERROR".equals(v.rule()))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(DiagnosticCategory.SYNTAX, returnErr.category());
+  }
+
+  @Test
+  public void testStackLeakPreservesOneBasedOriginalLineAfterMacroExpansion() {
+    String code =
+        """
+        function macro_line_test
+            for 2
+                nop
+            endfor
+            gsu_stack_push r4
+            return
+        endfunction
+        """;
+    DiagnosticResult result = coordinator.auditResult(code, "file:///macro_line_test.sgs");
+    var leak =
+        result.violations().stream()
+            .filter(v -> "STACK_LEAK_ON_RETURN".equals(v.rule()))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(DiagnosticCategory.STACK_INVARIANT, leak.category());
+    // 'return' is on 1-based line 6 of the unexpanded source (despite 'for'/'endfor' &
+    // 'gsu_stack_push' expanding to many lines)
+    assertEquals(6, leak.line());
+  }
+
+  @Test
+  public void testTransientSnippetAuditDoesNotMutateWorkspaceIndex() {
+    assertTrue(projectService.snapshot().effectiveFiles().isEmpty());
+    DiagnosticResult res =
+        coordinator.auditResult("function tmp\n return\nendfunction\n", "file:///ephemeral.sgs");
+    assertTrue(res.valid());
+    assertTrue(
+        projectService.snapshot().effectiveFiles().isEmpty(),
+        "Inline code audit must not mutate persistent WorkspaceIndex");
+  }
+
+  @Test
+  public void testPure65816DotSDoesNotTriggerFalseSuperFxHardwareOrStackDiagnostics() {
+    String cpu65816 =
+        """
+        .p816
+        .a16
+        .i16
+        .segment "CODE"
+        main_cpu:
+            lda #$1234
+            sbc #$0001
+            sta $2100
+            rts
+        """;
+    DiagnosticResult res = coordinator.auditResult(cpu65816, "file:///snes_main.s");
+    assertTrue(res.valid(), "Pure 65816 .s file must pass cleanly, got: " + res.violations());
+    assertTrue(
+        res.violations().isEmpty(), "Expected 0 diagnostics on 65816 .s: " + res.violations());
   }
 }

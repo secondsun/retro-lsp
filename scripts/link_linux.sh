@@ -10,7 +10,7 @@ cd "$DIR"
 rm -rf dist/linux
 $JAVA_HOME/bin/jlink \
   --module-path "$JAVA_HOME/jmods" \
-  --add-modules java.se,jdk.zipfs,jdk.httpserver,jdk.unsupported \
+  --add-modules java.base,java.compiler,java.logging,java.xml,jdk.zipfs,jdk.httpserver,jdk.unsupported \
   --output dist/linux \
   --vm=server \
   --strip-debug \

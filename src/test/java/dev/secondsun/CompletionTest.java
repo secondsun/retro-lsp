@@ -9,6 +9,9 @@ import dev.secondsun.lsp.TextDocumentIdentifier;
 import dev.secondsun.lsp.TextDocumentPositionParams;
 import dev.secondsun.lsp.TextEdit;
 import dev.secondsun.retro.util.CA65Scanner;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.TokenType;
+import dev.secondsun.retro.util.vo.DotKeywords;
 import dev.secondsun.retrolsp.feature.DirectiveCompletionFeature;
 import java.net.URI;
 import java.util.List;
@@ -133,9 +136,28 @@ public class CompletionTest {
   }
 
   @Test
+  public void testControlCommandsContainNoSunplusAndAllTokenizeCleanly() {
+    org.junit.jupiter.api.Assertions.assertFalse(
+        DirectiveCompletionFeature.CONTROL_COMMANDS.contains(".SUNPLUS"),
+        "Bogus .SUNPLUS directive must not be offered");
+    var scanner = new CA65Scanner();
+    for (String cmd : DirectiveCompletionFeature.CONTROL_COMMANDS) {
+      org.junit.jupiter.api.Assertions.assertNotNull(
+          DotKeywords.fromText(cmd), "Directive not recognized by DotKeywords: " + cmd);
+      var tokens = scanner.tokenize(cmd + "\n").getLineTokens(0);
+      org.junit.jupiter.api.Assertions.assertFalse(
+          tokens.isEmpty(), "Expected token for directive: " + cmd);
+      org.junit.jupiter.api.Assertions.assertNotEquals(
+          TokenType.TOK_NONE,
+          tokens.get(0).getType(),
+          "Directive tokenized as unknown TOK_NONE: " + cmd);
+    }
+  }
+
+  @Test
   public void testPseudoMacroCompletion() {
-    var symbolService = new dev.secondsun.retro.util.SymbolService();
-    var feature = new dev.secondsun.retrolsp.feature.SymbolCompletionFeature(symbolService);
+    var workspaceIndex = new DefaultWorkspaceIndex();
+    var feature = new dev.secondsun.retrolsp.feature.SymbolCompletionFeature(workspaceIndex);
 
     var fileContent = new CA65Scanner().tokenize("    func\n");
     var params = documentPositionParams(0, 8);
@@ -144,6 +166,13 @@ public class CompletionTest {
     org.junit.jupiter.api.Assertions.assertTrue(result.isPresent());
     var labels = result.get().items.stream().map(it -> it.label).toList();
     org.junit.jupiter.api.Assertions.assertTrue(labels.contains("function"));
+
+    // Complete "inl" -> "inline"
+    var fileInl = new CA65Scanner().tokenize("    inl\n");
+    var resInl = feature.handle(documentPositionParams(0, 7), fileInl);
+    org.junit.jupiter.api.Assertions.assertTrue(resInl.isPresent());
+    var inlLabels = resInl.get().items.stream().map(it -> it.label).toList();
+    org.junit.jupiter.api.Assertions.assertTrue(inlLabels.contains("inline"));
 
     // Complete "ca" -> "call"
     var fileCall = new CA65Scanner().tokenize("    ca\n");
@@ -170,7 +199,6 @@ public class CompletionTest {
   @Test
   public void testScopeAwareSymbolCompletion() {
     var uri = URI.create("file:///test.s");
-    var scanner = new CA65Scanner();
     var src =
         """
         globalVar = $1234
@@ -179,12 +207,11 @@ public class CompletionTest {
             lda\s
         endfunction
         """;
-    var fileContent = scanner.tokenize(src);
-    fileContent.uri = uri;
-    var symbolService = new dev.secondsun.retro.util.SymbolService();
-    symbolService.extractDefinitions(fileContent);
+    var workspaceIndex = new DefaultWorkspaceIndex();
+    workspaceIndex.openOrUpdateBuffer(uri, src);
+    var fileContent = workspaceIndex.getFileContents(uri);
 
-    var feature = new dev.secondsun.retrolsp.feature.SymbolCompletionFeature(symbolService);
+    var feature = new dev.secondsun.retrolsp.feature.SymbolCompletionFeature(workspaceIndex);
 
     // Inside myFunc (line 3, col 8)
     var params =

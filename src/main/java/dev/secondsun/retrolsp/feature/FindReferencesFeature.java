@@ -5,9 +5,9 @@ import dev.secondsun.lsp.Location;
 import dev.secondsun.lsp.Position;
 import dev.secondsun.lsp.Range;
 import dev.secondsun.lsp.ReferenceParams;
-import dev.secondsun.retro.util.FileService;
-import dev.secondsun.retro.util.ProjectService;
-import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceSnapshot;
 import dev.secondsun.retro.util.vo.TokenizedFile;
 import java.net.URI;
 import java.util.ArrayList;
@@ -17,30 +17,24 @@ import java.util.Optional;
 
 /**
  * Feature providing "Find All References" ({@code textDocument/references}) for CA65 and X-GSU
- * assembly symbols, backed by {@code retro-common}'s {@link ProjectService} and {@link
- * dev.secondsun.retro.util.ReferenceService}.
+ * assembly symbols, backed by {@link WorkspaceIndex} and {@link WorkspaceSnapshot}.
  */
 public class FindReferencesFeature implements Feature<ReferenceParams, List<Location>> {
 
-  private final ProjectService projectService;
+  private final WorkspaceIndex workspaceIndex;
 
-  /**
-   * Constructs a new {@code FindReferencesFeature} with the specified project service.
-   *
-   * @param projectService the project service managing workspace files, scopes, and references
-   */
-  public FindReferencesFeature(ProjectService projectService) {
-    this.projectService = Objects.requireNonNull(projectService, "projectService must not be null");
+  /** Constructs a standalone {@code FindReferencesFeature} with a default workspace index. */
+  public FindReferencesFeature() {
+    this(new DefaultWorkspaceIndex());
   }
 
   /**
-   * Constructs a new {@code FindReferencesFeature} with the specified file and symbol services.
+   * Constructs a new {@code FindReferencesFeature} backed by the specified {@link WorkspaceIndex}.
    *
-   * @param fileService the file service used to read source files
-   * @param symbolService the symbol service managing symbol definitions
+   * @param workspaceIndex the workspace index managing workspace files, scopes, and references
    */
-  public FindReferencesFeature(FileService fileService, SymbolService symbolService) {
-    this(new ProjectService(fileService, symbolService));
+  public FindReferencesFeature(WorkspaceIndex workspaceIndex) {
+    this.workspaceIndex = Objects.requireNonNull(workspaceIndex, "workspaceIndex must not be null");
   }
 
   @Override
@@ -66,8 +60,13 @@ public class FindReferencesFeature implements Feature<ReferenceParams, List<Loca
     int column = params.position.character;
     boolean includeDeclaration = params.context != null && params.context.includeDeclaration;
 
+    WorkspaceSnapshot snap = workspaceIndex.snapshot();
+    if (uri != null && snap.file(uri).isEmpty()) {
+      snap = snap.overlay(uri, String.join("\n", file.getRawLines()));
+    }
+
     List<dev.secondsun.retro.util.vo.Location> matches =
-        projectService.findReferencesAt(file, uri, line, column, includeDeclaration);
+        snap.findReferencesAt(file, uri, line, column, includeDeclaration);
 
     if (matches == null || matches.isEmpty()) {
       return Optional.empty();

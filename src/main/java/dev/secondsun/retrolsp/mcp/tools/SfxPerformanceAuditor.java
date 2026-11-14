@@ -1,26 +1,40 @@
 package dev.secondsun.retrolsp.mcp.tools;
 
+import dev.secondsun.retro.util.FunctionSyntaxHelper;
 import dev.secondsun.retro.util.Token;
 import dev.secondsun.retro.util.TokenType;
-import dev.secondsun.retro.util.instruction.GSUInstruction;
+import dev.secondsun.retro.util.sfx.SuperFxIsa;
+import dev.secondsun.retro.util.vo.DialectProfile;
 import dev.secondsun.retro.util.vo.TokenizedFile;
 import dev.secondsun.retro.util.vo.Tokens;
+import dev.secondsun.retrolsp.diagnostic.AuditFinding;
+import dev.secondsun.retrolsp.diagnostic.DiagnosticSeverity;
 import dev.secondsun.retrolsp.mcp.tools.SfxInvariantAuditor.InvariantViolation;
 import dev.secondsun.retrolsp.mcp.tools.SfxInvariantAuditor.Severity;
-import java.util.*;
+import java.net.URI;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
- * Static SuperFX performance anti-pattern checks. All findings are {@link Severity#WARNING}.
+ * Static SuperFX performance anti-pattern checks. All findings are warnings ({@link
+ * DiagnosticSeverity#WARNING} / {@link AuditFinding.Performance}).
  *
  * <ul>
- *   <li>{@code CALL_IN_HOT_LOOP}: {@code call} inside a for/forR/loop body or after {@code cache}
+ *   <li>{@code CACHE_IN_LOOP}: {@code cache} inside a {@code for}/{@code forR}/{@code loop} body
+ *   <li>{@code CALL_IN_HOT_LOOP}: {@code call} inside a {@code for}/{@code forR}/{@code loop} body
+ *       or after {@code cache}
  *   <li>{@code CACHE_BLOCK_OVERFLOW}: estimated cached block exceeds the 512-byte GSU cache
- *   <li>{@code REDUNDANT_RPIX_IN_SUBROUTINE}: {@code rpix} inside a function not preceding {@code
- *       stop}
+ *   <li>{@code REDUNDANT_RPIX_IN_SUBROUTINE}: {@code rpix} inside a {@code [inline] function} not
+ *       preceding {@code stop}
  *   <li>{@code ROMB_IN_HOT_LOOP}: {@code romb} inside a loop body
  * </ul>
  *
- * A line containing {@code perf:ignore} in a comment suppresses warnings on that line.
+ * <p>A line containing {@code perf:ignore} in a comment suppresses warnings on that line.
  */
 public class SfxPerformanceAuditor {
 
@@ -32,7 +46,14 @@ public class SfxPerformanceAuditor {
   /** Threshold at which a cache block containing unresolved calls is considered at risk. */
   static final int CACHE_NEAR_LIMIT_BYTES = 448;
 
-  private record Stmt(int line, String mnemonic, Token opcode, List<Token> tokens, int opIdx) {}
+  private record Stmt(
+      int line,
+      String mnemonic,
+      Token opcode,
+      List<Token> tokens,
+      int opIdx,
+      boolean isFunctionHeader,
+      boolean isEndFunction) {}
 
   private record Range(int start, int end) {
     boolean containsExclusiveStart(int line) {
@@ -41,20 +62,26 @@ public class SfxPerformanceAuditor {
   }
 
   /**
-   * Audits a tokenized file for SuperFX performance anti-patterns.
+   * Audits a tokenized file and returns typed {@link AuditFinding.Performance} records.
    *
    * @param file the tokenized file to audit
-   * @return list of performance invariant violations
+   * @return list of typed performance findings
    */
-  public List<InvariantViolation> audit(TokenizedFile file) {
+  public List<AuditFinding.Performance> auditFindings(TokenizedFile file) {
     if (file == null || file.isEmpty()) {
       return List.of();
     }
 
+    URI uri = file.uri();
     List<Stmt> stmts = new ArrayList<>();
     Map<String, Integer> labelLines = new HashMap<>();
     int total = file.textLines();
+    var scopeTree = file.scopeTree();
+
     for (int i = 0; i < total; i++) {
+      if (scopeTree.isMacroBodyLine(i) || scopeTree.dialectAtLine(i) != DialectProfile.SUPERFX) {
+        continue;
+      }
       Tokens lt = file.getLine(i);
       if (lt == null || lt.tokens().isEmpty()) {
         continue;
@@ -71,18 +98,32 @@ public class SfxPerformanceAuditor {
       if (opIdx >= tokens.size()) {
         continue;
       }
+      List<Token> tail = tokens.subList(opIdx, tokens.size());
+      boolean isFn = FunctionSyntaxHelper.isFunction(tail);
+      boolean isEndFn = FunctionSyntaxHelper.isEndFunction(tail);
       Token op = tokens.get(opIdx);
-      stmts.add(new Stmt(i + 1, op.text().toLowerCase(Locale.ROOT), op, tokens, opIdx));
+      stmts.add(
+          new Stmt(i + 1, op.text().toLowerCase(Locale.ROOT), op, tokens, opIdx, isFn, isEndFn));
     }
 
-    // Hot loop ranges (for/endfor and label..loop) and function/cache scopes
+    // Hot loop ranges (for/endfor and label..loop / move r13,r15..loop) and function/cache scopes
     List<Range> hotRanges = new ArrayList<>();
     Deque<Integer> forStack = new ArrayDeque<>();
-    String lastR13Label = null;
+    Integer lastR13LoopStartExclusive = null;
     int lastLine = stmts.isEmpty() ? 0 : stmts.get(stmts.size() - 1).line();
     Deque<Integer> fnStack = new ArrayDeque<>();
     Map<Integer, Integer> fnEndByStart = new HashMap<>();
     for (Stmt s : stmts) {
+      if (s.isFunctionHeader()) {
+        fnStack.push(s.line());
+        continue;
+      }
+      if (s.isEndFunction()) {
+        if (!fnStack.isEmpty()) {
+          fnEndByStart.put(fnStack.pop(), s.line());
+        }
+        continue;
+      }
       switch (s.mnemonic()) {
         case "for", "forr" -> forStack.push(s.line());
         case "endfor" -> {
@@ -90,28 +131,28 @@ public class SfxPerformanceAuditor {
             hotRanges.add(new Range(forStack.pop(), s.line()));
           }
         }
-        case "function" -> fnStack.push(s.line());
-        case "endfunction" -> {
-          if (!fnStack.isEmpty()) {
-            fnEndByStart.put(fnStack.pop(), s.line());
-          }
-        }
         case "iwt" -> {
           if (isR13(s)) {
-            lastR13Label = r13Target(s);
+            String targetName = r13Target(s);
+            Integer targetLine = targetName != null ? labelLines.get(targetName) : null;
+            lastR13LoopStartExclusive = targetLine != null ? targetLine - 1 : null;
+          }
+        }
+        case "move" -> {
+          if (isMoveR13R15(s)) {
+            lastR13LoopStartExclusive = s.line();
           }
         }
         case "loop" -> {
-          Integer target = lastR13Label != null ? labelLines.get(lastR13Label) : null;
-          if (target != null && target <= s.line()) {
-            hotRanges.add(new Range(target - 1, s.line()));
+          if (lastR13LoopStartExclusive != null && lastR13LoopStartExclusive < s.line()) {
+            hotRanges.add(new Range(lastR13LoopStartExclusive, s.line()));
           }
         }
         default -> {}
       }
     }
 
-    List<InvariantViolation> out = new ArrayList<>();
+    List<AuditFinding.Performance> out = new ArrayList<>();
     int stmtCount = stmts.size();
     List<int[]> cacheRegions = new ArrayList<>(); // {cacheLine, scopeEnd}
     for (int idx = 0; idx < stmtCount; idx++) {
@@ -124,31 +165,38 @@ public class SfxPerformanceAuditor {
           }
         }
         cacheRegions.add(new int[] {s.line(), scopeEnd});
-        checkCacheOverflow(stmts, idx, scopeEnd, file, out);
+        checkCacheOverflow(stmts, idx, scopeEnd, file, uri, out);
       }
     }
 
     int fnDepth = 0;
     for (int idx = 0; idx < stmtCount; idx++) {
       Stmt s = stmts.get(idx);
+      if (s.isFunctionHeader()) {
+        fnDepth++;
+        continue;
+      }
+      if (s.isEndFunction()) {
+        fnDepth = Math.max(0, fnDepth - 1);
+        continue;
+      }
       if (isSuppressed(file, s.line())) {
         continue;
       }
       switch (s.mnemonic()) {
-        case "function" -> fnDepth++;
-        case "endfunction" -> fnDepth = Math.max(0, fnDepth - 1);
         case "cache" -> {
           boolean inLoop = hotRanges.stream().anyMatch(r -> r.containsExclusiveStart(s.line()));
           if (inLoop) {
             int colStart = s.opcode().getStartIndex();
             int colEnd = s.tokens().get(s.tokens().size() - 1).getEndIndex();
             out.add(
-                new InvariantViolation(
+                new AuditFinding.Performance(
+                    uri,
                     s.line(),
                     colStart,
                     colEnd,
                     "CACHE_IN_LOOP",
-                    Severity.WARNING,
+                    DiagnosticSeverity.WARNING,
                     "'cache' inside a loop body resets CBR and invalidates all 32 cache lines on every iteration. Hoist 'cache' outside the loop."));
           }
         }
@@ -160,12 +208,13 @@ public class SfxPerformanceAuditor {
             int colStart = s.opcode().getStartIndex();
             int colEnd = s.tokens().get(s.tokens().size() - 1).getEndIndex();
             out.add(
-                new InvariantViolation(
+                new AuditFinding.Performance(
+                    uri,
                     s.line(),
                     colStart,
                     colEnd,
                     "CALL_IN_HOT_LOOP",
-                    Severity.WARNING,
+                    DiagnosticSeverity.WARNING,
                     "'call' inside a hardware loop or cache block incurs caller-save stack traffic and executes at un-cached ROM/RAM speeds if outside the 512-byte window. Consider an inline function or macro expansion."));
           }
         }
@@ -174,12 +223,13 @@ public class SfxPerformanceAuditor {
             int colStart = s.opcode().getStartIndex();
             int colEnd = s.tokens().get(s.tokens().size() - 1).getEndIndex();
             out.add(
-                new InvariantViolation(
+                new AuditFinding.Performance(
+                    uri,
                     s.line(),
                     colStart,
                     colEnd,
                     "ROMB_IN_HOT_LOOP",
-                    Severity.WARNING,
+                    DiagnosticSeverity.WARNING,
                     "'romb' inside a loop body switches the ROM bank on every iteration. Hoist ROM bank selection outside the loop or pre-cache the data in GSURAM."));
           }
         }
@@ -188,12 +238,13 @@ public class SfxPerformanceAuditor {
             int colStart = s.opcode().getStartIndex();
             int colEnd = s.tokens().get(s.tokens().size() - 1).getEndIndex();
             out.add(
-                new InvariantViolation(
+                new AuditFinding.Performance(
+                    uri,
                     s.line(),
                     colStart,
                     colEnd,
                     "REDUNDANT_RPIX_IN_SUBROUTINE",
-                    Severity.WARNING,
+                    DiagnosticSeverity.WARNING,
                     "'rpix' inside a function flushes the dual 8-pixel caches on every invocation. Execute 'rpix; rpix' once at the end of the rendering pass before the 8 settling NOPs and 'stop'."));
           }
         }
@@ -203,12 +254,34 @@ public class SfxPerformanceAuditor {
     return out;
   }
 
+  /**
+   * Audits a tokenized file for SuperFX performance anti-patterns and returns compatibility {@link
+   * InvariantViolation} records.
+   *
+   * @param file the tokenized file to audit
+   * @return list of performance invariant violations
+   */
+  public List<InvariantViolation> audit(TokenizedFile file) {
+    return auditFindings(file).stream()
+        .map(
+            f ->
+                new InvariantViolation(
+                    f.line(),
+                    f.columnStart(),
+                    f.columnEnd(),
+                    f.rule(),
+                    Severity.WARNING,
+                    f.message()))
+        .toList();
+  }
+
   private void checkCacheOverflow(
       List<Stmt> stmts,
       int cacheIdx,
       int scopeEnd,
       TokenizedFile file,
-      List<InvariantViolation> out) {
+      URI uri,
+      List<AuditFinding.Performance> out) {
     Stmt cache = stmts.get(cacheIdx);
     if (isSuppressed(file, cache.line())) {
       return;
@@ -237,79 +310,44 @@ public class SfxPerformanceAuditor {
       if ("call".equals(s.mnemonic())) {
         hasCall = true;
       }
-      bytes += byteWeight(s);
+      bytes += byteWeight(s, file);
     }
     int cacheColStart = cache.opcode().getStartIndex();
     int cacheColEnd = cache.tokens().get(cache.tokens().size() - 1).getEndIndex();
     if (bytes > CACHE_SIZE_BYTES) {
       out.add(
-          new InvariantViolation(
+          new AuditFinding.Performance(
+              uri,
               cache.line(),
               cacheColStart,
               cacheColEnd,
               "CACHE_BLOCK_OVERFLOW",
-              Severity.WARNING,
+              DiagnosticSeverity.WARNING,
               String.format(
                   "Estimated cached block is %d bytes, exceeding the 512-byte GSU instruction cache; the loop will spill into slow ROM fetches.",
                   bytes)));
     } else if (hasCall && bytes >= CACHE_NEAR_LIMIT_BYTES) {
       out.add(
-          new InvariantViolation(
+          new AuditFinding.Performance(
+              uri,
               cache.line(),
               cacheColStart,
               cacheColEnd,
               "CACHE_BLOCK_OVERFLOW",
-              Severity.WARNING,
+              DiagnosticSeverity.WARNING,
               String.format(
                   "Estimated cached block is %d bytes plus unresolved 'call' targets, approaching the 512-byte GSU instruction cache limit.",
                   bytes)));
     }
   }
 
-  /** Approximate assembled size in bytes of a statement. */
-  static int byteWeight(Stmt s) {
-    String m = s.mnemonic();
-    if (m.startsWith(".") || m.equals("function") || m.equals("endfunction")) {
+  /** Assembled size in bytes of a statement via {@link SuperFxIsa#byteWeight}. */
+  static int byteWeight(Stmt s, TokenizedFile file) {
+    if (s.isFunctionHeader() || s.isEndFunction()) {
       return 0;
     }
-    boolean hasImmediate =
-        s.tokens().stream().skip(s.opIdx() + 1L).anyMatch(t -> t.type == TokenType.TOK_HASH);
-    switch (m) {
-      case "iwt":
-        return 3;
-      case "lm":
-      case "sm":
-        return 4;
-      case "lms":
-      case "sms":
-      case "for":
-        return 3;
-      case "forr":
-        return 5;
-      case "ibt":
-      case "bra":
-      case "beq":
-      case "bne":
-      case "bcc":
-      case "bcs":
-      case "bpl":
-      case "bmi":
-      case "bvc":
-      case "bvs":
-      case "bge":
-      case "blt":
-      case "endfor":
-      case "return":
-        return 2;
-      case "call":
-        return 4;
-      default:
-        break;
-    }
-    if (GSUInstruction.isInstruction(s.opcode())) {
-      return hasImmediate ? 2 : 1;
-    }
-    return 4; // unknown macro invocation: conservative estimate
+    String lineText = file != null ? file.getLineText(s.line() - 1) : null;
+    return SuperFxIsa.byteWeight(s.tokens(), s.opIdx(), lineText);
   }
 
   private static boolean precedesStop(List<Stmt> stmts, int idx) {
@@ -331,6 +369,23 @@ public class SfxPerformanceAuditor {
   private static boolean isR13(Stmt s) {
     return s.tokens().size() > s.opIdx() + 1
         && "r13".equalsIgnoreCase(s.tokens().get(s.opIdx() + 1).text());
+  }
+
+  private static boolean isMoveR13R15(Stmt s) {
+    if (s.tokens().size() <= s.opIdx() + 2) {
+      return false;
+    }
+    if (!"r13".equalsIgnoreCase(s.tokens().get(s.opIdx() + 1).text())) {
+      return false;
+    }
+    for (int i = s.opIdx() + 2; i < s.tokens().size(); i++) {
+      Token t = s.tokens().get(i);
+      if (t.type == TokenType.TOK_COMMA) {
+        continue;
+      }
+      return "r15".equalsIgnoreCase(t.text());
+    }
+    return false;
   }
 
   /** Returns the lowercase label name if the statement is {@code iwt r13, #label}. */

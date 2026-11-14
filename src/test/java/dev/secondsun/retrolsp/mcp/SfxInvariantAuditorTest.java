@@ -718,4 +718,55 @@ public class SfxInvariantAuditorTest {
     assertEquals(Severity.ERROR, hits.get(0).severity());
     assertTrue(hits.get(0).message().contains("#-128"));
   }
+
+  @Test
+  public void testFromAlt1SubZeroComposesModalPrefixesWithoutLosingPendingFrom() {
+    String code =
+        """
+        from r12
+        alt1
+        sub #0
+        """;
+    AuditResult result = auditor.audit(code);
+    var v =
+        result.violations().stream()
+            .filter(violation -> "DESTRUCTIVE_FROM_ALU_TO_R0".equals(violation.rule()))
+            .findFirst();
+    assertTrue(
+        v.isPresent(),
+        "Expected alt1 between 'from r12' and 'sub #0' to preserve pendingFrom and flag R0 write");
+    assertEquals(1, v.get().line());
+  }
+
+  @Test
+  public void testInlineFunctionPerformanceAndSuperFxIsaByteWeights() {
+    String inlineRpix =
+        """
+        inline function draw_px
+            plot
+            rpix
+        endfunction
+        """;
+    var rpixHits = perf(auditor.audit(inlineRpix).violations(), "REDUNDANT_RPIX_IN_SUBROUTINE");
+    assertEquals(1, rpixHits.size());
+    assertEquals(3, rpixHits.get(0).line());
+
+    // 131 'moves r1, r2' = 131 * 4B = 524B > 512B -> triggers CACHE_BLOCK_OVERFLOW
+    StringBuilder movesLoop = new StringBuilder("cache\ntop:\n");
+    for (int i = 0; i < 131; i++) {
+      movesLoop.append("moves r1, r2\n");
+    }
+    movesLoop.append("loop\nnop\n");
+    assertEquals(
+        1, perf(auditor.audit(movesLoop.toString()).violations(), "CACHE_BLOCK_OVERFLOW").size());
+
+    // 131 'move r1, r2' = 131 * 2B = 262B <= 512B -> fits in 512B cache!
+    StringBuilder moveLoop = new StringBuilder("cache\ntop:\n");
+    for (int i = 0; i < 131; i++) {
+      moveLoop.append("move r1, r2\n");
+    }
+    moveLoop.append("loop\nnop\n");
+    assertTrue(
+        perf(auditor.audit(moveLoop.toString()).violations(), "CACHE_BLOCK_OVERFLOW").isEmpty());
+  }
 }

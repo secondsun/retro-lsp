@@ -2,9 +2,8 @@ package dev.secondsun.retrolsp.mcp;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import dev.secondsun.retro.util.FileService;
-import dev.secondsun.retro.util.ProjectService;
-import dev.secondsun.retro.util.SymbolService;
+import dev.secondsun.retro.util.DefaultWorkspaceIndex;
+import dev.secondsun.retro.util.WorkspaceIndex;
 import dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool;
 import dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool.ReferenceLocation;
 import dev.secondsun.retrolsp.mcp.tools.SfxFindReferencesTool.ReferenceResult;
@@ -18,11 +17,11 @@ import org.junit.jupiter.api.io.TempDir;
 public class SfxFindReferencesToolTest {
 
   private SfxFindReferencesTool tool;
-  private ProjectService projectService;
+  private WorkspaceIndex projectService;
 
   @BeforeEach
   public void setUp() {
-    projectService = new ProjectService(new FileService(), new SymbolService());
+    projectService = new DefaultWorkspaceIndex();
     tool = new SfxFindReferencesTool(projectService);
   }
 
@@ -105,7 +104,7 @@ public class SfxFindReferencesToolTest {
             nop
         """);
 
-    var ps = new ProjectService(new FileService(), new SymbolService(), root);
+    var ps = new DefaultWorkspaceIndex(root);
     ps.includeDir(root.toUri());
     var t = new SfxFindReferencesTool(ps);
 
@@ -136,7 +135,7 @@ public class SfxFindReferencesToolTest {
     Files.writeString(fixture.resolve("sub.s"), "call targetFn\n");
     Files.writeString(real.resolve("sub.s"), "call targetFn\n");
 
-    var ps = new ProjectService(new FileService(), new SymbolService(), root);
+    var ps = new DefaultWorkspaceIndex(root);
     ps.includeDir(root.toUri());
     var t = new SfxFindReferencesTool(ps);
 
@@ -163,7 +162,7 @@ public class SfxFindReferencesToolTest {
       return;
     }
     Path root = Path.of("..").toAbsolutePath().normalize();
-    var ps = new ProjectService(new FileService(), new SymbolService(), root);
+    var ps = new DefaultWorkspaceIndex(root);
     ps.includeDir(xgsuPath.toUri());
     var t = new SfxFindReferencesTool(ps);
 
@@ -180,12 +179,8 @@ public class SfxFindReferencesToolTest {
 
     var lineNumbers = r.references().stream().map(ReferenceLocation::lineNumber).sorted().toList();
     assertTrue(
-        lineNumbers.containsAll(List.of(36, 466))
-            && (lineNumbers.contains(148)
-                || lineNumbers.contains(198)
-                || lineNumbers.contains(305)
-                || lineNumbers.contains(315)),
-        "Expected references to include lines [36, 148/198/305/315, 466], found: " + lineNumbers);
+        lineNumbers.containsAll(List.of(36, 466)),
+        "Expected references to include lines [36, 466], found: " + lineNumbers);
   }
 
   @Test
@@ -196,7 +191,7 @@ public class SfxFindReferencesToolTest {
       return;
     }
     Path root = Path.of("..").toAbsolutePath().normalize();
-    var ps = new ProjectService(new FileService(), new SymbolService(), root);
+    var ps = new DefaultWorkspaceIndex(root);
     ps.includeDir(xgsuPath.toUri());
     var t = new SfxFindReferencesTool(ps);
 
